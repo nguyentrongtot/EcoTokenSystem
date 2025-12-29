@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EcoTokenSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20251224095915_InitialCreate")]
+    [Migration("20251226043322_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -119,7 +119,7 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                         {
                             Id = new Guid("c9d8e7f6-a5b4-3c2d-1e0f-9876543210ab"),
                             ItemId = new Guid("c1e9d8a7-b6f5-4e3d-2c1b-0a9f8e7d6c5b"),
-                            RedemptionDate = new DateTime(2025, 12, 21, 9, 59, 11, 742, DateTimeKind.Utc).AddTicks(686),
+                            RedemptionDate = new DateTime(2025, 12, 23, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(167),
                             UserId = new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a")
                         });
                 });
@@ -162,15 +162,15 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                             AdminId = new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"),
                             PointsChange = 600,
                             PostId = new Guid("1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"),
-                            TransactionDate = new DateTime(2025, 12, 15, 9, 59, 11, 742, DateTimeKind.Utc).AddTicks(616),
+                            TransactionDate = new DateTime(2025, 12, 17, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(72),
                             UserId = new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a")
                         },
                         new
                         {
-                            Id = new Guid("ca2d49d6-7f95-4e49-a5ca-03c199ad70e7"),
+                            Id = new Guid("918902a2-7912-4dc3-b7b1-0b1277a39cb1"),
                             AdminId = new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"),
                             PointsChange = 900,
-                            TransactionDate = new DateTime(2025, 12, 14, 8, 59, 11, 742, DateTimeKind.Utc).AddTicks(662),
+                            TransactionDate = new DateTime(2025, 12, 16, 3, 33, 21, 717, DateTimeKind.Utc).AddTicks(116),
                             UserId = new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a")
                         });
                 });
@@ -228,12 +228,12 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                         {
                             Id = new Guid("1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"),
                             AdminId = new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"),
-                            ApprovedRejectedAt = new DateTime(2025, 12, 15, 9, 59, 11, 742, DateTimeKind.Utc).AddTicks(587),
+                            ApprovedRejectedAt = new DateTime(2025, 12, 17, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(41),
                             AwardedPoints = 600,
                             Content = "Đây là bài viết mẫu đã được duyệt.",
                             ImageUrl = "/images/seed/post1.jpg",
                             StatusId = 2,
-                            SubmittedAt = new DateTime(2025, 12, 14, 9, 59, 11, 742, DateTimeKind.Utc).AddTicks(581),
+                            SubmittedAt = new DateTime(2025, 12, 16, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(34),
                             Title = "Cách phân loại rác hiệu quả",
                             UserId = new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a")
                         },
@@ -244,7 +244,7 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                             Content = "Bài viết mẫu đang chờ duyệt  .",
                             ImageUrl = "/images/seed/post2.jpg",
                             StatusId = 1,
-                            SubmittedAt = new DateTime(2025, 12, 19, 9, 59, 11, 742, DateTimeKind.Utc).AddTicks(593),
+                            SubmittedAt = new DateTime(2025, 12, 21, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(47),
                             Title = "Tại sao cần dùng túi tái chế?  ",
                             UserId = new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a")
                         });
@@ -369,11 +369,11 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                         {
                             Id = new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"),
                             Address = "",
-                            CreatedAt = new DateTime(2025, 12, 24, 9, 59, 11, 742, DateTimeKind.Utc).AddTicks(513),
+                            CreatedAt = new DateTime(2025, 12, 26, 4, 33, 21, 716, DateTimeKind.Utc).AddTicks(9968),
                             CurrentPoints = 99999,
                             Gender = "",
                             Name = "Quản trị viên Hệ thống",
-                            PasswordHash = "$2a$11$U7Uui5d.WbC1UDdblLBNquo5Q3y9EXd81VUkYwXMoqU3fpViUFMs2",
+                            PasswordHash = "$2a$11$axHi8t8Q21833yAjIsSa7u856PfTU3zrCyzY5HvwGIc7PqI1s0i2G",
                             PhoneNumber = "",
                             RoleId = 2,
                             Streak = 99999,
@@ -383,11 +383,11 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                         {
                             Id = new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a"),
                             Address = "",
-                            CreatedAt = new DateTime(2025, 12, 24, 9, 59, 11, 742, DateTimeKind.Utc).AddTicks(516),
+                            CreatedAt = new DateTime(2025, 12, 26, 4, 33, 21, 716, DateTimeKind.Utc).AddTicks(9971),
                             CurrentPoints = 1500,
                             Gender = "",
                             Name = "Nhật Anh",
-                            PasswordHash = "$2a$11$kiLYvtupDCK9GP.euIwgHuo7y6Ko66w9GAL2bRQJzoDo9/Bhm5ZwG",
+                            PasswordHash = "$2a$11$6zbrgKc56IAnwxs6iVAeauLo3a.h1IwTJ.mRu.8q/JVhOUCJavsVe",
                             PhoneNumber = "",
                             RoleId = 1,
                             Streak = 0,

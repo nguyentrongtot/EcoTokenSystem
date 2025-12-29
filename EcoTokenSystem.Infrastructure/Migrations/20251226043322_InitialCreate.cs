@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace EcoTokenSystem.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class FinalInitialSetup : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -184,9 +184,12 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                 columns: new[] { "Id", "ImageUrl", "Name", "RequiredPoints" },
                 values: new object[,]
                 {
-                    { new Guid("c1e9d8a7-b6f5-4e3d-2c1b-0a9f8e7d6c5b"), "/images/rewards/premium.png", "1 Tháng Membership Premium", 2500 },
-                    { new Guid("d7a5f4b3-2c1e-4a9d-9b8c-3f0a7e6d5b4c"), "/images/rewards/reusablebottle.png", "Bình nước Thân thiện Môi trường", 1000 },
-                    { new Guid("e2b1a8c0-4e3d-4b7f-8c9a-6f2e0d1b4c5a"), "/images/rewards/voucher50k.png", "Voucher Cây Xanh 50k", 500 }
+                    { new Guid("046564c4-882e-49c7-bd74-eb38d41ef521"), "/imagesItem/76b61892-6589-4fd1-af0c-9f02311683c9.jpg", "Giá đỡ máy tính bảng bằng tre", 100 },
+                    { new Guid("c1e9d8a7-b6f5-4e3d-2c1b-0a9f8e7d6c5b"), "/imagesItem/6144411c-172b-45d0-abcb-ae714ea825a5.jpg", "Ống hút Tre", 400 },
+                    { new Guid("d7a5f4b3-2c1e-4a9d-9b8c-3f0a7e6d5b4c"), "/imagesItem/af1c1380-7edc-40cf-afd1-95b6f8b6d91e.jpg", "Bình nước Thân thiện Môi trường", 1000 },
+                    { new Guid("e2b1a8c0-4e3d-4b7f-8c9a-6f2e0d1b4c5a"), "/imagesItem/4cf97def-f0ef-4a06-899d-dbffa4e2f02f.jpg", "Túi xách vải ", 500 },
+                    { new Guid("ebb8e449-506c-4f12-9bac-15a63edd502f"), "/imagesItem/75e0829b-fb8f-47f1-9977-d0d377aaca9d.jpg", "Set quà tặng bằng tre ", 150 },
+                    { new Guid("ed322a69-55b6-47c6-909d-2ce26aaf5a11"), "/imagesItem/8e5f5ba6-8d81-4333-842d-292399c4a44c.jpg", "Hộp bút thân thiện với môi trường", 200 }
                 });
 
             migrationBuilder.InsertData(
@@ -213,9 +216,33 @@ namespace EcoTokenSystem.Infrastructure.Migrations
                 columns: new[] { "Id", "Address", "CreatedAt", "CurrentPoints", "DateOfBirth", "Gender", "Name", "PasswordHash", "PhoneNumber", "RoleId", "Streak", "Username" },
                 values: new object[,]
                 {
-                    { new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a"), "TP Hồ Chí Minh", new DateTime(2025, 11, 21, 6, 58, 59, 677, DateTimeKind.Utc).AddTicks(2265), 1500, new DateTime(2025, 11, 21, 6, 58, 59, 677, DateTimeKind.Utc).AddTicks(2264), "Nam", "Người dùng thử nghiệm", "$2a$11$YxK8vhj1T.F70B.HtsDBIOeFRDz4ONqiJ8uc8Rc32Xwy3Gy3wuCA6", "", 1, 0, "user_test" },
-                    { new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"), "TP Hồ Chí Minh", new DateTime(2025, 11, 21, 6, 58, 59, 677, DateTimeKind.Utc).AddTicks(2209), 99999, new DateTime(2025, 11, 21, 6, 58, 59, 677, DateTimeKind.Utc).AddTicks(2201), "Nữ", "Quản trị viên Hệ thống", "$2a$11$QOh34GWE1pvJ1QzCEht4leqFoWINZcdFdZWpc9B5PPlmg.oTX3OwO", "", 2, 99999, "admin" }
+                    { new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a"), "", new DateTime(2025, 12, 26, 4, 33, 21, 716, DateTimeKind.Utc).AddTicks(9971), 1500, null, "", "Nhật Anh", "$2a$11$6zbrgKc56IAnwxs6iVAeauLo3a.h1IwTJ.mRu.8q/JVhOUCJavsVe", "", 1, 0, "user_test" },
+                    { new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"), "", new DateTime(2025, 12, 26, 4, 33, 21, 716, DateTimeKind.Utc).AddTicks(9968), 99999, null, "", "Quản trị viên Hệ thống", "$2a$11$axHi8t8Q21833yAjIsSa7u856PfTU3zrCyzY5HvwGIc7PqI1s0i2G", "", 2, 99999, "admin" }
                 });
+
+            migrationBuilder.InsertData(
+                table: "ItemsHistory",
+                columns: new[] { "Id", "ItemId", "RedemptionDate", "UserId" },
+                values: new object[] { new Guid("c9d8e7f6-a5b4-3c2d-1e0f-9876543210ab"), new Guid("c1e9d8a7-b6f5-4e3d-2c1b-0a9f8e7d6c5b"), new DateTime(2025, 12, 23, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(167), new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a") });
+
+            migrationBuilder.InsertData(
+                table: "PointHistories",
+                columns: new[] { "Id", "AdminId", "PointsChange", "PostId", "TransactionDate", "UserId" },
+                values: new object[] { new Guid("918902a2-7912-4dc3-b7b1-0b1277a39cb1"), new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"), 900, null, new DateTime(2025, 12, 16, 3, 33, 21, 717, DateTimeKind.Utc).AddTicks(116), new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a") });
+
+            migrationBuilder.InsertData(
+                table: "Posts",
+                columns: new[] { "Id", "AdminId", "ApprovedRejectedAt", "AwardedPoints", "Content", "ImageUrl", "RejectionReason", "StatusId", "SubmittedAt", "Title", "UserId" },
+                values: new object[,]
+                {
+                    { new Guid("1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"), new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"), new DateTime(2025, 12, 17, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(41), 600, "Đây là bài viết mẫu đã được duyệt.", "/images/seed/post1.jpg", null, 2, new DateTime(2025, 12, 16, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(34), "Cách phân loại rác hiệu quả", new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a") },
+                    { new Guid("f5e4d3c2-b1a0-9876-5432-10fedcba9876"), null, null, 0, "Bài viết mẫu đang chờ duyệt  .", "/images/seed/post2.jpg", null, 1, new DateTime(2025, 12, 21, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(47), "Tại sao cần dùng túi tái chế?  ", new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a") }
+                });
+
+            migrationBuilder.InsertData(
+                table: "PointHistories",
+                columns: new[] { "Id", "AdminId", "PointsChange", "PostId", "TransactionDate", "UserId" },
+                values: new object[] { new Guid("b1a2c3d4-e5f6-7890-abcd-ef0123456789"), new Guid("f3e09f3d-6a2a-47c1-80f1-622abce815ca"), 600, new Guid("1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"), new DateTime(2025, 12, 17, 4, 33, 21, 717, DateTimeKind.Utc).AddTicks(72), new Guid("a3c72b9a-5d2e-4f8a-9a1c-4e1d8a2c9b6a") });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ItemsHistory_ItemId",
