@@ -1,14 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useActions } from '../context/ActionsContext';
+import { getCurrentUserApi } from '../api/authApi';
+import { formatDate } from '../utils/dateUtils';
 import './ActionHistory.css';
 
 const ActionHistory = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { getUserActions } = useActions();
   const [activeTab, setActiveTab] = useState('pending'); // Default to 'pending' to show newly submitted actions
   const [error, setError] = useState(null);
   const [allActions, setAllActions] = useState([]);
+
+  // Refresh user data khi vào trang để đồng bộ streak và tokens
+  useEffect(() => {
+    const refreshUserData = async () => {
+      try {
+        const response = await getCurrentUserApi();
+        if (response.success && response.data) {
+          // Update user trong AuthContext để đồng bộ streak và tokens
+          await updateUser(response.data);
+        }
+      } catch (err) {
+        console.error('Error refreshing user data:', err);
+        // Không hiển thị lỗi cho user, chỉ log
+      }
+    };
+
+    if (user?.id) {
+      refreshUserData();
+    }
+  }, [user?.id, updateUser]);
 
   useEffect(() => {
     const loadActions = async () => {
@@ -40,21 +62,25 @@ const ActionHistory = () => {
     ? rejectedActions 
     : pendingActions;
 
+  // Tính tổng tokens từ các actions đã được duyệt
+  // Lưu ý: Streak được tính theo ngày liên tiếp (không phải tổng từ các actions)
+  // Nên không hiển thị streak trong tổng điểm thưởng
   const totalRewards = {
-    streak: approvedActions.reduce((sum, action) => sum + (action?.rewards?.streak || 0), 0),
-    ecoTokens: approvedActions.reduce((sum, action) => sum + (action?.rewards?.ecoTokens || 0), 0)
+    ecoTokens: approvedActions.reduce((sum, action) => sum + (action?.rewards?.ecoTokens || action?.awardedPoints || 0), 0)
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Chưa có';
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Ngày không hợp lệ';
-      return date.toLocaleString('vi-VN');
-    } catch {
-      return 'Ngày không hợp lệ';
-    }
-  };
+  // Tính số ngày unique có action được approve (chỉ để tham khảo, không phải streak thực tế)
+  const uniqueApprovedDates = new Set(
+    approvedActions
+      .map(action => {
+        const date = action.approvedRejectedAt || action.reviewedAt;
+        if (!date) return null;
+        const d = new Date(date);
+        return d.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      })
+      .filter(Boolean)
+  );
+
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -102,10 +128,13 @@ const ActionHistory = () => {
           <div className="stat-value">{approvedActions.length}</div>
         </div>
         <div className="stat-card rewards-stat">
-          <div className="stat-label">Tổng điểm thưởng</div>
+          <div className="stat-label">Tổng thưởng</div>
+          <div className="stat-value">🪙 {totalRewards.ecoTokens}</div>
+        </div>
+        <div className="stat-card current-stats">
+          <div className="stat-label">Hiện tại</div>
           <div className="stat-value">
-            🔥 {totalRewards.streak} Streak<br />
-            🪙 {totalRewards.ecoTokens} Tokens
+            🔥 {user?.streak || 0} • 🪙 {user?.ecoTokens || user?.currentPoints || 0}
           </div>
         </div>
       </div>

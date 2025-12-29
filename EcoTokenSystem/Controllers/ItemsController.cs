@@ -106,5 +106,54 @@ namespace EcoTokenSystem.API.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpGet]
+        [Route("history")]
+        [Authorize]
+        public async Task<IActionResult> GetItemsHistory()
+        {
+            try
+            {
+                Guid userId = GetUserIdFromToken();
+                var response = await pointsAndItemsService.GetItemsHistoryAsync(userId);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet]
+        [Route("history/all")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAllItemsHistory()
+        {
+            try
+            {
+                var response = await pointsAndItemsService.GetAllItemsHistoryAsync();
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPatch]
+        [Route("history/{historyId:Guid}/shipped")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateShippedStatus([FromRoute] Guid historyId, [FromBody] bool isShipped)
+        {
+            try
+            {
+                var response = await pointsAndItemsService.UpdateItemsHistoryShippedStatusAsync(historyId, isShipped);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

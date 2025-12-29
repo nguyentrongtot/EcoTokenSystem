@@ -132,22 +132,3 @@
   text-decoration: underline;
 }
 
-.moderator-hint {
-  margin-top: 20px;
-  padding: 15px;
-  background: #f0f7f0;
-  border-radius: 10px;
-  border-left: 4px solid #4a7c2a;
-  font-size: 0.85em;
-  color: #555;
-}
-
-.moderator-hint p {
-  margin: 5px 0;
-}
-
-.moderator-hint strong {
-  color: #2d5016;
-  font-weight: 600;
-}
-

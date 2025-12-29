@@ -2,37 +2,130 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useActions } from '../context/ActionsContext';
+import { useConfig } from '../context/ConfigContext';
+import { getCurrentUserApi } from '../api/authApi';
 import Calendar from '../components/Calendar';
 import './Home.css';
 
 const Home = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { addPendingAction, getUserActions } = useActions();
+  const { config } = useConfig();
   const navigate = useNavigate();
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [description, setDescription] = useState('');
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
   const [approvedDates, setApprovedDates] = useState([]);
 
-  // Get approved actions dates for calendar
+  // Refresh user data khi vào trang để đồng bộ tokens và streak với database
+  useEffect(() => {
+    const refreshUserData = async () => {
+      try {
+        const response = await getCurrentUserApi();
+        if (response.success && response.data) {
+          await updateUser(response.data);
+        }
+      } catch (error) {
+        console.error('Error refreshing user data:', error);
+        // Không hiển thị lỗi cho user, chỉ log
+      }
+    };
+    
+    if (user?.id) {
+      refreshUserData();
+    }
+  }, [user?.id, updateUser]);
+
+  // Workflow: Lấy thông tin các bài viết được duyệt của user -> Lấy ngày giờ -> Tính toán và hiển thị
   useEffect(() => {
     const loadApprovedDates = async () => {
       if (!user?.id || !getUserActions) {
         setApprovedDates([]);
         return;
       }
+      
       try {
+        // Bước 1: Lấy thông tin các bài viết được duyệt của user
         const userActions = await getUserActions(user.id);
-        const approved = userActions.filter(action => action && action.status === 'approved');
-        const dates = approved.map(action => action.reviewedAt || action.submittedAt).filter(Boolean);
-        setApprovedDates(dates);
+        
+        if (!Array.isArray(userActions) || userActions.length === 0) {
+          setApprovedDates([]);
+          return;
+        }
+        
+        // Lọc các bài viết đã được duyệt (status === 'approved')
+        const approved = userActions.filter(action => {
+          const isApproved = action && action.status === 'approved';
+          if (!isApproved) return false;
+          
+          // Kiểm tra có approvedRejectedAt không
+          const hasDate = action.approvedRejectedAt || action.reviewedAt;
+          return hasDate;
+        });
+        
+        if (approved.length === 0) {
+          setApprovedDates([]);
+          return;
+        }
+        
+        // Bước 2: Lấy thông tin ngày giờ của từng bài viết
+        const dates = approved
+          .map((action, index) => {
+            // Ưu tiên approvedRejectedAt (ngày approve thực tế từ backend)
+            const dateStr = action.approvedRejectedAt || action.reviewedAt;
+            
+            if (!dateStr) {
+              console.warn(`[Calendar] Action ${index + 1} missing date:`, action.id, action);
+              return null;
+            }
+            
+            try {
+              // Parse date string từ backend
+              const date = new Date(dateStr);
+              
+              if (isNaN(date.getTime())) {
+                return null;
+              }
+              
+              // Giữ nguyên ISO string để Calendar component xử lý timezone
+              const isoString = date.toISOString();
+              
+              return isoString;
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
+        
+        // Bước 3: Loại bỏ duplicate dates (nếu có nhiều bài được approve trong cùng một ngày)
+        const uniqueDates = Array.from(new Set(dates));
+        
+        // Log để debug
+        console.log('[Calendar] Final result:', {
+          totalActions: userActions.length,
+          approvedActions: approved.length,
+          validDates: dates.length,
+          uniqueDates: uniqueDates.length,
+          sampleDates: uniqueDates.slice(0, 5).map(d => {
+            const date = new Date(d);
+            return {
+              iso: d,
+              local: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+            };
+          })
+        });
+        
+        // Bước 4: Set approved dates để Calendar component hiển thị
+        setApprovedDates(uniqueDates);
       } catch (error) {
-        console.error('Error loading approved dates:', error);
+        console.error('[Calendar] Error loading approved dates:', error);
         setApprovedDates([]);
       }
     };
+    
     loadApprovedDates();
-  }, [user?.id, getUserActions]);
+  }, [user?.id, user?.ecoTokens, user?.streak, getUserActions]); // Thêm user?.ecoTokens và user?.streak để refresh khi user data được cập nhật
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -51,15 +144,30 @@ const Home = () => {
       alert('Vui lòng chọn ảnh hành động xanh của bạn');
       return;
     }
+
+    // Validate title và content
+    if (!title.trim()) {
+      alert('Vui lòng nhập tiêu đề bài viết');
+      return;
+    }
+
+    if (!content.trim()) {
+      alert('Vui lòng nhập nội dung bài viết');
+      return;
+    }
     
     // Add to pending actions for moderator review using API
+    // Gửi File object (selectedImage) thay vì base64 (imagePreview)
     const result = await addPendingAction({
       userId: user?.id,
       userName: user?.nickname || 'Người dùng',
       userAvatar: user?.avatar || '🌱',
       userAvatarImage: user?.avatarImage || null,
-      imagePreview: imagePreview,
-      description: description || 'Hành động sống xanh',
+      imageFile: selectedImage, // Gửi File object để backend có thể upload
+      imagePreview: imagePreview, // Giữ lại để hiển thị preview
+      title: title.trim(), // Tiêu đề bài viết
+      description: content.trim(), // Nội dung bài viết (map sang content)
+      content: content.trim(), // Nội dung bài viết
       imageEmoji: '📷',
       tag: 'default'
     });
@@ -68,7 +176,8 @@ const Home = () => {
       alert(result.message || 'Đã gửi hành động xanh! Vui lòng chờ kiểm duyệt từ moderator.');
       setSelectedImage(null);
       setImagePreview(null);
-      setDescription('');
+      setTitle('');
+      setContent('');
       // Navigate to action history page
       navigate('/action-history');
     } else {
@@ -76,10 +185,82 @@ const Home = () => {
     }
   };
 
-  const getMascotColor = () => {
-    if (user?.streak >= 100) return '#FFD700'; // Gold
-    if (user?.streak >= 50) return '#4A90E2'; // Blue
-    return '#4a7c2a'; // Green
+  // Tính toán linh vật dựa trên config streak milestones
+  const getCurrentMascot = useMemo(() => {
+    const streak = user?.streak || 0;
+    const milestones = config?.streakMilestones || {};
+    
+    // Chuyển đổi milestones từ object sang array và parse streak
+    // Xử lý cả PascalCase (từ backend) và camelCase (từ frontend)
+    const milestonesArray = Object.keys(milestones)
+      .filter(key => !isNaN(parseInt(key))) // Chỉ lấy keys là số
+      .map(key => {
+        const milestoneData = milestones[key];
+        return {
+          streak: parseInt(key),
+          emoji: milestoneData?.Emoji || milestoneData?.emoji || '🌱',
+          color: milestoneData?.Color || milestoneData?.color || '#4a7c2a',
+          name: milestoneData?.Name || milestoneData?.name || 'Linh vật'
+        };
+      });
+    
+    // Nếu không có milestones từ config, dùng default
+    if (milestonesArray.length === 0) {
+      const defaultMascot = {
+        streak: 0,
+        color: '#4a7c2a',
+        emoji: '🌱',
+        name: 'Linh vật xanh lá'
+      };
+      return {
+        current: defaultMascot,
+        next: null,
+        isHighest: false
+      };
+    }
+    
+    // Sắp xếp milestones theo thứ tự giảm dần (cao nhất trước)
+    const sortedMilestones = milestonesArray.sort((a, b) => b.streak - a.streak);
+    
+    // Sắp xếp tăng dần để tìm milestone tiếp theo
+    const sortedAscending = [...sortedMilestones].sort((a, b) => a.streak - b.streak);
+    
+    // Tìm milestone cao nhất mà user đã đạt được
+    // Tìm milestone đầu tiên (cao nhất) mà streak >= milestone.streak
+    const currentMilestone = sortedMilestones.find(m => streak >= m.streak);
+    
+    // Tìm milestone tiếp theo (cao hơn streak hiện tại)
+    const nextMilestone = sortedAscending.find(m => streak < m.streak);
+    
+    // Nếu user chưa đạt milestone nào, hiển thị milestone đầu tiên (thấp nhất) từ config
+    // Thay vì dùng default hardcode
+    if (!currentMilestone) {
+      const firstMilestone = sortedAscending[0]; // Milestone thấp nhất
+      return {
+        current: firstMilestone,
+        next: firstMilestone,
+        isHighest: false
+      };
+    }
+    
+    return {
+      current: currentMilestone,
+      next: nextMilestone,
+      isHighest: !nextMilestone // Đã đạt milestone cao nhất
+    };
+  }, [user?.streak, config?.streakMilestones]);
+
+      const getMascotColor = () => {
+        return getCurrentMascot.current.color;
+      };
+
+  const getDaysToNextMilestone = () => {
+    if (getCurrentMascot.isHighest) {
+      return null; // Đã đạt milestone cao nhất
+    }
+    const currentStreak = user?.streak || 0;
+    const nextStreak = getCurrentMascot.next?.streak || 0;
+    return Math.max(0, nextStreak - currentStreak);
   };
 
   return (
@@ -109,24 +290,81 @@ const Home = () => {
         </div>
       </div>
 
-      <div className={`mascot-section ${user?.streak >= 100 ? 'golden-mascot' : ''}`}>
-        {user?.streak >= 100 && (
-          <div className="golden-badge">
+      <div 
+        className={`mascot-section ${getCurrentMascot.isHighest ? 'golden-mascot' : ''}`}
+        style={{
+          '--mascot-color': getCurrentMascot.current.color,
+          background: getCurrentMascot.isHighest 
+            ? `linear-gradient(135deg, ${getCurrentMascot.current.color} 0%, ${getCurrentMascot.current.color}dd 50%, ${getCurrentMascot.current.color} 100%)`
+            : `linear-gradient(135deg, ${getCurrentMascot.current.color}15 0%, ${getCurrentMascot.current.color}30 50%, ${getCurrentMascot.current.color}15 100%)`,
+          backgroundSize: '200% 200%',
+          backgroundPosition: '0% 50%',
+          animation: getCurrentMascot.isHighest ? 'goldenGradient 3s ease infinite' : 'mascotPattern 4s ease infinite',
+          border: `3px solid ${getCurrentMascot.current.color}80`,
+          boxShadow: `0 8px 30px ${getCurrentMascot.current.color}50, inset 0 0 50px ${getCurrentMascot.current.color}20`,
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Pattern overlay với màu từ config */}
+        <div 
+          className="mascot-pattern-overlay"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundImage: `repeating-linear-gradient(
+              45deg,
+              transparent,
+              transparent 10px,
+              ${getCurrentMascot.current.color}08 10px,
+              ${getCurrentMascot.current.color}08 20px
+            )`,
+            animation: 'patternMove 3s linear infinite',
+            pointerEvents: 'none'
+          }}
+        />
+        {getCurrentMascot.isHighest && (
+          <div 
+            className="golden-badge"
+            style={{
+              backgroundColor: getCurrentMascot.current.color,
+              border: `2px solid ${getCurrentMascot.current.color}`
+            }}
+          >
             <span className="badge-icon">🏆</span>
-            <span className="badge-text">LINH VẬT VÀNG</span>
+            <span className="badge-text">{getCurrentMascot.current.name.toUpperCase()}</span>
           </div>
         )}
-        <div className={`mascot ${user?.streak >= 100 ? 'golden' : user?.streak >= 50 ? 'blue' : 'green'}`} style={{ color: getMascotColor() }}>
-          {user?.streak >= 100 ? '🌟' : user?.streak >= 50 ? '🐢' : '🌱'}
+        <div 
+          className={`mascot ${getCurrentMascot.isHighest ? 'golden' : getCurrentMascot.current.streak >= 50 ? 'blue' : 'green'}`} 
+          style={{ 
+            color: getMascotColor(),
+            position: 'relative',
+            zIndex: 2,
+            textShadow: `0 0 20px ${getCurrentMascot.current.color}80, 0 0 40px ${getCurrentMascot.current.color}40`
+          }}
+        >
+          {getCurrentMascot.current.emoji}
         </div>
-        <p className="mascot-text">
-          {user?.streak >= 100
-            ? 'Linh vật vàng - Bạn là người hùng xanh!'
-            : user?.streak >= 50
-            ? 'Linh vật xanh dương - Tiếp tục phát huy!'
-            : 'Linh vật xanh lá - Hãy duy trì streak!'}
+        <p 
+          className="mascot-text"
+          style={{
+            color: getCurrentMascot.isHighest ? '#fff' : getCurrentMascot.current.color,
+            fontWeight: '600',
+            fontSize: '1.2em',
+            position: 'relative',
+            zIndex: 2,
+            textShadow: getCurrentMascot.isHighest ? '0 2px 4px rgba(0,0,0,0.3)' : `0 2px 4px ${getCurrentMascot.current.color}40`
+          }}
+        >
+          {getCurrentMascot.current.name} - {getCurrentMascot.isHighest 
+            ? 'Bạn là người hùng xanh!' 
+            : 'Tiếp tục phát huy!'}
         </p>
-        {user?.streak >= 100 ? (
+        {getCurrentMascot.isHighest ? (
           <div className="golden-achievement">
             <p className="achievement-title">🎉 Thành tựu đặc biệt!</p>
             <p className="achievement-desc">
@@ -145,8 +383,23 @@ const Home = () => {
             </div>
           </div>
         ) : (
-          <p className="mascot-progress">
-            Còn {100 - (user?.streak || 0)} ngày để đạt linh vật vàng
+          <p 
+            className="mascot-progress"
+            style={{
+              color: getCurrentMascot.current.color,
+              fontWeight: '500',
+              fontSize: '1.1em',
+              position: 'relative',
+              zIndex: 2
+            }}
+          >
+            {getDaysToNextMilestone() !== null ? (
+              <>
+                Còn <strong>{getDaysToNextMilestone()}</strong> ngày để đạt <strong style={{ color: getCurrentMascot.next?.color || getCurrentMascot.current.color }}>{getCurrentMascot.next?.name || 'milestone tiếp theo'}</strong>
+              </>
+            ) : (
+              'Hãy duy trì streak của bạn!'
+            )}
           </p>
         )}
       </div>
@@ -191,13 +444,29 @@ const Home = () => {
         {imagePreview && (
           <>
             <div className="form-group">
-              <label>Mô tả hành động (tùy chọn)</label>
-              <textarea
-                placeholder="Mô tả hành động xanh của bạn..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows="3"
+              <label>Tiêu đề bài viết *</label>
+              <input
+                type="text"
+                placeholder="Ví dụ: Đi xe đạp đến trường"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 className="description-input"
+                maxLength={200}
+                required
+              />
+              <small style={{ color: '#666', fontSize: '0.85em' }}>
+                {title.length}/200 ký tự
+              </small>
+            </div>
+            <div className="form-group">
+              <label>Nội dung bài viết *</label>
+              <textarea
+                placeholder="Mô tả chi tiết hành động xanh của bạn..."
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows="5"
+                className="description-input"
+                required
               />
             </div>
             <button className="submit-action-btn" onClick={handleSubmitAction}>

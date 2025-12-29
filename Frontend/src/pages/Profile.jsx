@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { getCurrentUserApi } from '../api/authApi';
 import './Profile.css';
 
 const Profile = () => {
   const { user, updateUser, logout, changePassword } = useAuth();
   const navigate = useNavigate();
   const [nickname, setNickname] = useState(user?.nickname || '');
-  const [fullName, setFullName] = useState(user?.fullName || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || '');
@@ -17,27 +17,70 @@ const Profile = () => {
   const [avatar, setAvatar] = useState(user?.avatar || '🌱');
   const [avatarImage, setAvatarImage] = useState(user?.avatarImage || null);
   const [avatarType, setAvatarType] = useState(user?.avatarImage ? 'image' : 'emoji'); // 'emoji' or 'image'
-  
+
   // Password change form
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  // Refresh user data khi vào trang để đồng bộ tokens và streak với database
+  useEffect(() => {
+    const refreshUserData = async () => {
+      try {
+        const response = await getCurrentUserApi();
+        if (response.success && response.data) {
+          await updateUser(response.data);
+        }
+      } catch (error) {
+        console.error('Error refreshing user data:', error);
+        // Không hiển thị lỗi cho user, chỉ log
+      }
+    };
+
+    if (user?.id) {
+      refreshUserData();
+    }
+  }, [user?.id, updateUser]);
 
   useEffect(() => {
     if (user) {
-      setNickname(user.nickname || '');
-      setFullName(user.fullName || '');
+      // Database chỉ có field 'Name', nickname và name là một
+      const userNickname = user.nickname || user.name || user.fullName || '';
+
+      setNickname(userNickname);
       setEmail(user.email || '');
-      setPhone(user.phone || '');
-      setDateOfBirth(user.dateOfBirth || '');
-      setGender(user.gender || '');
+      setPhone(user.phone || user.phoneNumber || '');
+
+      // Convert dateOfBirth từ ISO format (2012-01-14T00:00:00) sang yyyy-MM-dd cho input type="date"
+      let formattedDate = '';
+      if (user.dateOfBirth) {
+        try {
+          const date = new Date(user.dateOfBirth);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toISOString().split('T')[0]; // Format: yyyy-MM-dd
+          }
+        } catch (error) {
+          // Nếu không parse được, thử lấy trực tiếp nếu đã đúng format
+          if (typeof user.dateOfBirth === 'string' && user.dateOfBirth.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            formattedDate = user.dateOfBirth;
+          }
+        }
+      }
+      setDateOfBirth(formattedDate);
+
+      setGender(user.gender || 'Khác'); // Default value nếu không có
       setAddress(user.address || '');
       setNotifications(user.notifications ?? true);
-      setAvatar(user.avatar || '🌱');
-      setAvatarImage(user.avatarImage || null);
-      setAvatarType(user.avatarImage ? 'image' : 'emoji');
+      // Avatar: nếu có avatarImage (base64) thì dùng image, không thì dùng emoji
+      const userAvatar = user.avatar || '🌱';
+      const userAvatarImage = user.avatarImage || (user.avatar?.startsWith('data:image') ? user.avatar : null);
+      setAvatar(userAvatarImage ? '🖼️' : userAvatar);
+      setAvatarImage(userAvatarImage);
+      setAvatarType(userAvatarImage ? 'image' : 'emoji');
     }
   }, [user]);
 
@@ -49,7 +92,7 @@ const Profile = () => {
         alert('Kích thước ảnh không được vượt quá 2MB');
         return;
       }
-      
+
       // Check file type
       if (!file.type.startsWith('image/')) {
         alert('Vui lòng chọn file ảnh');
@@ -76,23 +119,64 @@ const Profile = () => {
   const avatars = ['🌱', '🌿', '🍃', '🌳', '🌲', '🌴', '🦋', '🐢', '🦎', '🌍'];
 
   const handleSave = async () => {
-    const updatedData = {
-      nickname: nickname || user.nickname,
-      fullName: fullName || user.fullName,
-      email: email || user.email,
-      phone: phone || user.phone,
-      dateOfBirth: dateOfBirth || user.dateOfBirth,
-      gender: gender || user.gender,
-      address: address || user.address,
-      notifications,
-      avatar: avatarType === 'image' ? (avatarImage ? '🖼️' : avatar) : avatar,
-      avatarImage: avatarType === 'image' ? avatarImage : null
-    };
-    const result = await updateUser(updatedData);
-    if (result.success) {
-      alert(result.message || 'Đã lưu thay đổi!');
-    } else {
-      alert(result.message || 'Có lỗi xảy ra khi lưu thay đổi');
+    // Validate required fields trước khi gửi
+    if (!nickname || nickname.trim() === '') {
+      setSaveMessage('');
+      alert('Vui lòng nhập nickname (tên hiển thị)');
+      return;
+    }
+
+    if (!gender || gender.trim() === '') {
+      setSaveMessage('');
+      alert('Vui lòng chọn giới tính');
+      return;
+    }
+
+    setSaving(true);
+    setSaveMessage('');
+
+    try {
+      // Nickname và name là một - dùng nickname làm name cho backend
+      const nameToSave = nickname.trim() || user.nickname || user.name || user.fullName || '';
+
+      const updatedData = {
+        name: nameToSave, // Backend yêu cầu 'name' field - dùng nickname
+        nickname: nameToSave, // Nickname và name là một
+        email: email.trim() || user.email || '',
+        phone: phone.trim() || user.phone || '',
+        phoneNumber: phone.trim() || user.phone || user.phoneNumber || '', // Backend yêu cầu 'phoneNumber' field
+        dateOfBirth: dateOfBirth || user.dateOfBirth || null,
+        gender: gender || user.gender || 'Khác',
+        address: address.trim() || user.address || '',
+        notifications,
+        avatar: avatarType === 'image' ? (avatarImage || avatar) : avatar,
+        avatarImage: avatarType === 'image' ? avatarImage : null,
+        avatarType: avatarType // Gửi loại avatar để backend xử lý
+      };
+
+      const result = await updateUser(updatedData);
+
+      if (result.success) {
+        setSaveMessage('success');
+        // Form sẽ tự động cập nhật thông qua useEffect khi user state thay đổi
+        setTimeout(() => {
+          setSaveMessage('');
+        }, 3000);
+      } else {
+        setSaveMessage('error');
+        alert(result.message || 'Có lỗi xảy ra khi lưu thay đổi');
+        setTimeout(() => {
+          setSaveMessage('');
+        }, 5000);
+      }
+    } catch (error) {
+      setSaveMessage('error');
+      alert('Có lỗi xảy ra: ' + (error.message || 'Lỗi không xác định'));
+      setTimeout(() => {
+        setSaveMessage('');
+      }, 5000);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -107,8 +191,9 @@ const Profile = () => {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setPasswordError('Mật khẩu mới phải có ít nhất 6 ký tự');
+    // Backend yêu cầu MinLength(8) cho NewPassword
+    if (newPassword.length < 8) {
+      setPasswordError('Mật khẩu mới phải có ít nhất 8 ký tự');
       return;
     }
 
@@ -157,10 +242,10 @@ const Profile = () => {
       <div className="profile-content">
         <div className="profile-section">
           <h2>Thông tin cá nhân</h2>
-          
+
           <div className="avatar-section">
             <label>Avatar</label>
-            
+
             <div className="avatar-type-tabs">
               <button
                 type="button"
@@ -242,19 +327,10 @@ const Profile = () => {
               type="text"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              placeholder="Nhập nickname của bạn"
+              placeholder="Nhập tên hiển thị của bạn"
+              required
             />
-          </div>
-
-          <div className="form-group">
-            <label>Họ và tên</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Nhập họ và tên đầy đủ của bạn"
-            />
-            <span className="input-hint">Tên đầy đủ của bạn</span>
+            <span className="input-hint">Tên hiển thị của bạn</span>
           </div>
 
           <div className="form-group">
@@ -269,16 +345,17 @@ const Profile = () => {
           </div>
 
           <div className="form-group">
-            <label>Giới tính</label>
+            <label>Giới tính *</label>
             <select
               value={gender}
               onChange={(e) => setGender(e.target.value)}
               className="form-select"
+              required
             >
               <option value="">-- Chọn giới tính --</option>
-              <option value="male">Nam</option>
-              <option value="female">Nữ</option>
-              <option value="other">Khác</option>
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
+              <option value="Khác">Khác</option>
             </select>
           </div>
 
@@ -319,7 +396,7 @@ const Profile = () => {
 
         <div className="profile-section">
           <h2>Thống kê</h2>
-          
+
           <div className="stats-display">
             <div className="stat-item">
               <div className="stat-label">Level sống xanh</div>
@@ -342,7 +419,7 @@ const Profile = () => {
 
         <div className="profile-section">
           <h2>Thay đổi mật khẩu</h2>
-          
+
           <form onSubmit={handleChangePassword} className="password-form">
             <div className="form-group">
               <label>Mật khẩu cũ *</label>
@@ -390,7 +467,7 @@ const Profile = () => {
 
         <div className="profile-section">
           <h2>Thông báo</h2>
-          
+
           <div className="notification-setting">
             <div className="setting-item">
               <div className="setting-info">
@@ -410,8 +487,23 @@ const Profile = () => {
         </div>
 
         <div className="profile-actions">
-          <button className="save-btn" onClick={handleSave}>
-            Lưu thay đổi
+          {saveMessage === 'success' && (
+            <div className="success-message" style={{ marginBottom: '10px', padding: '10px', borderRadius: '5px', backgroundColor: '#d4edda', color: '#155724', border: '1px solid #c3e6cb' }}>
+              ✅ Đã lưu thay đổi thành công!
+            </div>
+          )}
+          {saveMessage === 'error' && (
+            <div className="error-message" style={{ marginBottom: '10px', padding: '10px', borderRadius: '5px', backgroundColor: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb' }}>
+              ❌ Có lỗi xảy ra khi lưu thay đổi
+            </div>
+          )}
+          <button
+            className="save-btn"
+            onClick={handleSave}
+            disabled={saving}
+            style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+          >
+            {saving ? '⏳ Đang lưu...' : '💾 Lưu thay đổi'}
           </button>
           <button className="logout-btn" onClick={handleLogout}>
             Đăng xuất

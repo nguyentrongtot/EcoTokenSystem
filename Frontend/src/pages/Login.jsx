@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './Login.css';
 
 const Login = () => {
-  const [loginType, setLoginType] = useState('phone'); // 'phone' or 'email'
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  // Backend chỉ hỗ trợ login bằng username, không phân biệt phone/email
+  // Nếu user đăng ký với phone/email làm username thì vẫn login được
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -35,19 +35,15 @@ const Login = () => {
         navigate('/home');
       }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, loading, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     // Simple validation
-    if (loginType === 'phone' && !phone) {
-      setError('Vui lòng nhập số điện thoại');
-      return;
-    }
-    if (loginType === 'email' && !email) {
-      setError('Vui lòng nhập email');
+    if (!username) {
+      setError('Vui lòng nhập tên đăng nhập');
       return;
     }
     if (!password) {
@@ -55,10 +51,9 @@ const Login = () => {
       return;
     }
 
-    const loginIdentifier = loginType === 'phone' ? phone : email;
-
-    // Use API for login
-    const result = await login(loginIdentifier, password);
+    // Gọi API login từ backend
+    // Backend endpoint: POST /api/User/Login
+    const result = await login(username, password);
     
     if (result.success) {
       // Redirect based on role
@@ -83,43 +78,17 @@ const Login = () => {
           <p>Biến lối sống xanh thành giá trị thật</p>
         </div>
 
-        <div className="login-tabs">
-          <button
-            className={loginType === 'phone' ? 'active' : ''}
-            onClick={() => setLoginType('phone')}
-          >
-            Số điện thoại
-          </button>
-          <button
-            className={loginType === 'email' ? 'active' : ''}
-            onClick={() => setLoginType('email')}
-          >
-            Email
-          </button>
-        </div>
-
         <form onSubmit={handleSubmit} className="login-form">
-          {loginType === 'phone' ? (
-            <div className="form-group">
-              <label>Số điện thoại</label>
-              <input
-                type="tel"
-                placeholder="Nhập số điện thoại"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-          ) : (
-            <div className="form-group">
-              <label>Email</label>
-              <input
-                type="email"
-                placeholder="Nhập email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-          )}
+          <div className="form-group">
+            <label>Tên đăng nhập</label>
+            <input
+              type="text"
+              placeholder="Nhập tên đăng nhập (username)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+            />
+          </div>
 
           <div className="form-group">
             <label>Mật khẩu</label>
@@ -128,6 +97,7 @@ const Login = () => {
               placeholder="Nhập mật khẩu"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
             />
           </div>
 
@@ -139,23 +109,8 @@ const Login = () => {
         </form>
 
         <p className="login-footer">
-          Chưa có tài khoản? <a href="#register">Đăng ký ngay</a>
+          Chưa có tài khoản? <Link to="/register">Đăng ký ngay</Link>
         </p>
-        <div className="moderator-hint">
-          <p>🌱 Tài khoản user mặc định:</p>
-          <p>Email/SĐT: <strong>user</strong> hoặc <strong>user@example.com</strong> hoặc <strong>0123456789</strong></p>
-          <p>Mật khẩu: <strong>user123</strong></p>
-          <p style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #ddd' }}>
-            🔐 Tài khoản kiểm duyệt:
-          </p>
-          <p>Email/SĐT: <strong>moderator</strong> hoặc <strong>kiemduyet</strong></p>
-          <p>Mật khẩu: <strong>moderator123</strong></p>
-          <p style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #ddd' }}>
-            👑 Tài khoản admin:
-          </p>
-          <p>Email/SĐT: <strong>admin</strong></p>
-          <p>Mật khẩu: <strong>admin123</strong></p>
-        </div>
       </div>
     </div>
   );

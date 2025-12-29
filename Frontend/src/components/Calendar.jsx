@@ -11,15 +11,47 @@ const Calendar = ({ approvedDates = [] }) => {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+  // Bước 3: Tính toán và hiển thị dựa trên thông tin ngày giờ
   // Convert approved dates to Set for quick lookup (format: YYYY-MM-DD)
+  // Xử lý timezone: Backend trả về UTC, cần convert về local time để hiển thị đúng ngày
   const approvedDatesSet = useMemo(() => {
-    return new Set(
-      approvedDates.map(date => {
+    const dateSet = new Set();
+    
+    approvedDates.forEach((date) => {
+      try {
+        if (!date) {
+          return;
+        }
+        
+        // Parse date từ backend (ISO string với UTC timezone)
         const d = new Date(date);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      })
-    );
+        if (isNaN(d.getTime())) {
+          return;
+        }
+        
+        // Convert UTC date về local date để hiển thị đúng ngày theo timezone của user
+        // Lấy năm, tháng, ngày từ local time (không phải UTC)
+        const year = d.getFullYear();
+        const month = d.getMonth();
+        const day = d.getDate();
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        dateSet.add(dateStr);
+      } catch (error) {
+        // Silent fail - chỉ log error nếu cần debug
+      }
+    });
+    
+    return dateSet;
   }, [approvedDates]);
+
+  // Tính số ngày đã được duyệt trong tháng hiện tại
+  const approvedCountInCurrentMonth = useMemo(() => {
+    const currentMonthYear = `${year}-${String(month + 1).padStart(2, '0')}`;
+    return Array.from(approvedDatesSet).filter(dateStr => {
+      return dateStr.startsWith(currentMonthYear);
+    }).length;
+  }, [approvedDatesSet, year, month]);
 
   const isDateApproved = (day) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -67,14 +99,12 @@ const Calendar = ({ approvedDates = [] }) => {
     calendarDays.push(day);
   }
 
-  const approvedCount = approvedDatesSet.size;
-
   return (
     <div className="calendar-container">
       <div className="calendar-header">
         <h3>📅 Lịch sống xanh</h3>
         <p className="calendar-subtitle">
-          {approvedCount} ngày đã được duyệt trong tháng này
+          {approvedCountInCurrentMonth} ngày đã được duyệt trong tháng này
         </p>
       </div>
 
@@ -112,10 +142,10 @@ const Calendar = ({ approvedDates = [] }) => {
             <div
               key={index}
               className={`calendar-day ${approved ? 'approved' : ''} ${today ? 'today' : ''}`}
-              title={approved ? `Ngày ${day} - Đã có hành động được duyệt` : `Ngày ${day}`}
+              title={approved ? `Ngày ${day}/${month + 1}/${year} - Đã có hành động được duyệt` : `Ngày ${day}/${month + 1}/${year}`}
             >
               <span className="day-number">{day}</span>
-              {approved && <span className="approved-indicator">✓</span>}
+              {approved && <span className="approved-indicator" aria-label="Đã được duyệt">✓</span>}
             </div>
           );
         })}

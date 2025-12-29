@@ -1,205 +1,391 @@
-import { createResponse, createError, delay } from './api';
+// ============================================
+// AUTH API - GỌI BACKEND THẬT
+// ============================================
+import { apiPost, apiGet, apiPatch } from './apiClient';
 
-// Mock users database
-const getUsersFromStorage = () => {
-  const users = [];
-  const keys = Object.keys(localStorage);
-  keys.forEach(key => {
-    if (key.startsWith('user_') || key === 'user') {
-      try {
-        const user = JSON.parse(localStorage.getItem(key));
-        if (user && user.id) {
-          users.push(user);
+/**
+ * Map response từ backend sang format frontend
+ */
+const mapUserResponse = (backendData) => {
+  // Backend trả về có thể là:
+  // - LoginResponseDTO: { UserId, Username, RoleName, CurrentPoints, Token } (uppercase)
+  // - ResponseUserProfileDTO: { Username, Name, RoleName, CurrentPoints, ... } (KHÔNG có Id và Token)
+  // Frontend cần: { id, username, role, currentPoints, token, ... }
+  
+  // Map ID - thử cả uppercase và lowercase
+  // LƯU Ý: ResponseUserProfileDTO không có Id, chỉ LoginResponseDTO mới có UserId
+  const userId = backendData.UserId || backendData.userId || backendData.id || null;
+  
+  // Map token - thử cả uppercase và lowercase
+  // LƯU Ý: ResponseUserProfileDTO không có Token, chỉ LoginResponseDTO mới có Token
+  const token = backendData.Token || backendData.token || null;
+  
+  // Map username
+  const username = backendData.Username || backendData.username || '';
+  
+  // Map role - normalize về lowercase
+  const roleName = backendData.RoleName || backendData.roleName || backendData.role || 'user';
+  const role = typeof roleName === 'string' ? roleName.toLowerCase() : 'user';
+  
+  // Map currentPoints
+  const currentPoints = backendData.CurrentPoints ?? backendData.currentPoints ?? 0;
+  
+  return {
+    id: userId, // Đảm bảo có id
+    userId: userId, // Giữ userId để tương thích
+    username: username,
+    role: role,
+    roleName: backendData.RoleName || backendData.roleName || role,
+    currentPoints: currentPoints,
+    ecoTokens: currentPoints, // Map ecoTokens từ CurrentPoints để tương thích với Home.jsx
+    token: token, // Đảm bảo token được map
+    // Thêm các field khác nếu có
+    name: backendData.Name || backendData.name || '',
+    fullName: backendData.Name || backendData.name || '',
+    nickname: backendData.Name || backendData.name || username || '',
+    email: backendData.Email || backendData.email || '',
+    avatar: backendData.Avatar || backendData.avatar || '🌱',
+    avatarImage: (backendData.Avatar || backendData.avatar)?.startsWith('data:image') ? (backendData.Avatar || backendData.avatar) : null,
+    phone: backendData.PhoneNumber || backendData.phoneNumber || backendData.phone || '',
+    phoneNumber: backendData.PhoneNumber || backendData.phoneNumber || backendData.phone || '',
+    address: backendData.Address || backendData.address || '',
+    gender: backendData.Gender || backendData.gender || '',
+    dateOfBirth: backendData.DateOfBirth || backendData.dateOfBirth || null,
+    streak: backendData.Streak || backendData.streak || 0,
+    createdAt: backendData.CreatedAt || backendData.createdAt || null,
+  };
+};
+
+/**
+ * Login API
+ * POST /api/User/Login
+ */
+export const loginApi = async (username, password) => {
+  try {
+    // Validate input
+    if (!username || !password) {
+      return {
+        success: false,
+        message: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu'
+      };
+    }
+
+    const response = await apiPost('/User/Login', {
+      username: username.trim(),
+      password: password
+    }, false); // Không cần auth cho login
+
+    // Kiểm tra response có thành công và có data không
+    if (response.success && response.data) {
+      // apiPost đã xử lý và trả về data.data (nếu có nested structure)
+      // hoặc data trực tiếp nếu không có nested structure
+      // Vì vậy response.data ở đây đã là LoginResponseDTO { userId, username, token, ... }
+      let rawData = response.data;
+      
+      // Kiểm tra xem có phải nested structure không (có thể apiPost chưa xử lý)
+      // Nếu rawData có property 'data' và không phải là LoginResponseDTO (không có userId/token ở root level)
+      if (rawData.data && typeof rawData.data === 'object' && !rawData.userId && !rawData.token) {
+        rawData = rawData.data;
+      }
+
+      // Kiểm tra có token không (bắt buộc) - thử cả lowercase và uppercase
+      const token = rawData.Token || rawData.token;
+      if (!token) {
+        console.error('[Login API] No token found in response.data:', rawData);
+        return {
+          success: false,
+          message: 'Đăng nhập thất bại: Không nhận được token từ server'
+        };
+      }
+
+      // Kiểm tra có UserId không (bắt buộc) - thử cả uppercase và lowercase
+      const userId = rawData.UserId || rawData.userId || rawData.id;
+      if (!userId) {
+        console.error('[Login API] No UserId found in response.data:', rawData);
+        return {
+          success: false,
+          message: 'Đăng nhập thất bại: Không nhận được User ID từ server'
+        };
+      }
+
+      // Map response từ backend
+      const userData = mapUserResponse(rawData);
+      
+      // Đảm bảo token và id được map đúng (fallback nếu mapUserResponse không map được)
+      if (!userData.token) {
+        userData.token = token;
+      }
+      if (!userData.id) {
+        userData.id = userId;
+        userData.userId = userId;
+      }
+      
+      return {
+        success: true,
+        message: response.message || 'Đăng nhập thành công',
+        data: userData
+      };
+    }
+
+    // Nếu không có data hoặc success = false
+    return {
+      success: false,
+      message: response.message || 'Đăng nhập thất bại: Tên đăng nhập hoặc mật khẩu không chính xác'
+    };
+  } catch (error) {
+    // Xử lý các loại lỗi
+    console.error('[Login API] Error:', error);
+    let errorMessage = 'Đăng nhập thất bại';
+    
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (error.response) {
+      errorMessage = error.response.message || 'Có lỗi xảy ra khi kết nối đến server';
+    }
+
+    return {
+      success: false,
+      message: errorMessage
+    };
+  }
+};
+
+/**
+ * Register API
+ * POST /api/User/Register
+ */
+export const registerApi = async (userData) => {
+  try {
+    // Backend DTO: Username, Password, PasswordConfirm (PascalCase)
+    const response = await apiPost('/User/Register', {
+      Username: userData.username,
+      Password: userData.password,
+      PasswordConfirm: userData.passwordConfirm
+    }, false); // Không cần auth cho register
+
+    if (response.success) {
+      return {
+        success: true,
+        message: response.message || 'Đăng ký thành công',
+        data: null
+      };
+    }
+
+    throw new Error(response.message || 'Đăng ký thất bại');
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || 'Đăng ký thất bại'
+    };
+  }
+};
+
+/**
+ * Get current user API
+ * GET /api/User/me
+ */
+export const getCurrentUserApi = async () => {
+  try {
+    const response = await apiGet('/User/me', true); // Cần auth
+
+    if (response.success && response.data) {
+      const userData = mapUserResponse(response.data);
+      return {
+        success: true,
+        message: response.message || 'Lấy thông tin thành công',
+        data: userData
+      };
+    }
+
+    throw new Error(response.message || 'Không thể lấy thông tin người dùng');
+  } catch (error) {
+    // Nếu lỗi 401, có nghĩa là token không hợp lệ hoặc đã hết hạn
+    if (error.status === 401 || error.message.includes('401') || error.message.includes('Unauthorized')) {
+      // Throw error để AuthContext có thể xử lý
+      const authError = new Error('Unauthorized: Token không hợp lệ hoặc đã hết hạn');
+      authError.status = 401;
+      throw authError;
+    }
+    // Các lỗi khác (network, timeout, etc.) - throw để AuthContext có thể giữ lại cached user
+    throw error;
+  }
+};
+
+/**
+ * Update user profile API
+ * PATCH /api/User/me
+ */
+export const updateUserApi = async (userId, updatedData) => {
+  try {
+    // Map frontend data sang backend format
+    // Backend UpdateProfileRequestDTO yêu cầu tất cả fields Required
+    // Cần lấy giá trị hiện tại từ user nếu không có trong updatedData
+    
+    // Lấy thông tin user hiện tại trước
+    const currentUserResponse = await getCurrentUserApi().catch(() => null);
+    const currentUser = currentUserResponse?.data || {};
+    
+    // Map dateOfBirth - Backend cần DateOnly format (YYYY-MM-DD)
+    let dateOfBirth = null;
+    if (updatedData.dateOfBirth) {
+      const date = new Date(updatedData.dateOfBirth);
+      dateOfBirth = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    } else if (currentUser.dateOfBirth) {
+      const date = new Date(currentUser.dateOfBirth);
+      dateOfBirth = date.toISOString().split('T')[0];
+    } else {
+      // Backend yêu cầu DateOfBirth là required, nếu không có thì dùng ngày hiện tại
+      dateOfBirth = new Date().toISOString().split('T')[0];
+    }
+
+    // Lấy Name - nickname và name là một
+    const name = updatedData.name ||
+                 updatedData.nickname || 
+                 currentUser.name || 
+                 currentUser.Name || 
+                 currentUser.nickname || 
+                 currentUser.fullName ||
+                 currentUser.username || 
+                 'Người dùng'; // Default value thay vì empty string
+
+    // Lấy Gender - ưu tiên: updatedData.gender > currentUser.gender/Gender > default
+    const gender = updatedData.gender || 
+                   currentUser.gender || 
+                   currentUser.Gender || 
+                   'Khác'; // Default value thay vì empty string
+
+    // Lấy PhoneNumber - ưu tiên: updatedData.phoneNumber/phone > currentUser.phoneNumber/PhoneNumber > default
+    const phoneNumber = updatedData.phoneNumber || 
+                        updatedData.phone || 
+                        currentUser.phoneNumber || 
+                        currentUser.PhoneNumber || 
+                        '0000000000'; // Default value thay vì empty string
+
+    // Lấy Address - ưu tiên: updatedData.address > currentUser.address/Address > default
+    const address = updatedData.address || 
+                    currentUser.address || 
+                    currentUser.Address || 
+                    'Chưa cập nhật'; // Default value thay vì empty string
+
+    // Lấy Email - ưu tiên: updatedData.email > currentUser.email/Email > default
+    const email = updatedData.email || 
+                  currentUser.email || 
+                  currentUser.Email || 
+                  ''; // Email không bắt buộc, có thể để trống
+
+    // Lấy Avatar - ưu tiên: updatedData.avatar > currentUser.avatar/Avatar > default
+    // Nếu avatarType là 'image' và có avatarImage, lưu URL hoặc base64 (tùy backend)
+    // Nếu avatarType là 'emoji', lưu emoji string
+    let avatar = '';
+    if (updatedData.avatarType === 'image' && updatedData.avatarImage) {
+      // Nếu có ảnh, có thể lưu base64 hoặc URL (tùy backend yêu cầu)
+      // Tạm thời lưu emoji đặc biệt để đánh dấu có ảnh, hoặc lưu base64
+      avatar = updatedData.avatarImage; // Lưu base64 hoặc URL
+    } else if (updatedData.avatar) {
+      avatar = updatedData.avatar; // Emoji
+    } else {
+      avatar = currentUser.avatar || 
+               currentUser.Avatar || 
+               '🌱'; // Default emoji
+    }
+
+    const backendData = {
+      name: name,
+      email: email,
+      avatar: avatar,
+      phoneNumber: phoneNumber,
+      address: address,
+      gender: gender,
+      dateOfBirth: dateOfBirth,
+    };
+
+    const response = await apiPatch('/User/me', backendData, true);
+
+    if (response.success) {
+      // Backend trả về ResponseDTO<ResponseUserProfileDTO> với Data chứa user mới
+      let userData = null;
+
+      // Kiểm tra response.data (có thể là ResponseDTO format hoặc data trực tiếp)
+      if (response.data) {
+        // Nếu response.data có Data (uppercase) - ResponseDTO format
+        if (response.data.Data) {
+          userData = mapUserResponse(response.data.Data);
         }
-      } catch (e) {
-        // Ignore invalid data
+        // Nếu response.data có data (lowercase) - ResponseDTO format
+        else if (response.data.data) {
+          userData = mapUserResponse(response.data.data);
+        }
+        // Nếu response.data là ResponseUserProfileDTO trực tiếp
+        else {
+          userData = mapUserResponse(response.data);
+        }
+      }
+
+      // Nếu không có data trong response, gọi lại getCurrentUserApi để lấy dữ liệu mới
+      if (!userData) {
+        const userResponse = await getCurrentUserApi();
+        if (userResponse.success) {
+          userData = userResponse.data;
+        }
+      }
+
+      if (userData) {
+        return {
+          success: true,
+          message: response.message || 'Cập nhật thông tin thành công',
+          data: userData
+        };
       }
     }
-  });
-  return users;
-};
 
-// Login API
-export const loginApi = async (identifier, password) => {
-  await delay(800); // Simulate network delay
-
-  // Check moderator/admin login
-  if ((identifier === 'moderator' || identifier === 'admin' || identifier === 'kiemduyet') && password === 'moderator123') {
-    const moderatorData = {
-      id: 'mod-1',
-      nickname: 'Kiểm Duyệt Viên',
-      email: identifier,
-      phone: null,
-      avatar: '👮',
-      role: 'moderator',
-      notifications: true,
-      password: password,
-      token: `token_mod_${Date.now()}`
+    throw new Error(response.message || 'Cập nhật thất bại');
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || 'Cập nhật thất bại'
     };
-    return createResponse(moderatorData, true, 'Đăng nhập thành công');
   }
-
-  // Check admin login
-  if (identifier === 'admin' && password === 'admin123') {
-    const adminData = {
-      id: 'admin-1',
-      nickname: 'Quản Trị Viên',
-      email: identifier,
-      phone: null,
-      avatar: '👑',
-      role: 'admin',
-      notifications: true,
-      password: password,
-      token: `token_admin_${Date.now()}`
-    };
-    return createResponse(adminData, true, 'Đăng nhập thành công');
-  }
-
-  // Check default user
-  if ((identifier === 'user' || identifier === 'user@example.com' || identifier === '0123456789') && password === 'user123') {
-    // Check if default user exists in storage
-    let defaultUser = null;
-    const users = getUsersFromStorage();
-    defaultUser = users.find(u => u.id === 'user-default');
-
-    if (!defaultUser) {
-      // Create default user
-      defaultUser = {
-        id: 'user-default',
-        nickname: 'Người Dùng Xanh',
-        email: 'user@example.com',
-        phone: '0123456789',
-        avatar: '🌱',
-        role: 'user',
-        ecoTokens: 100,
-        streak: 0,
-        level: 1,
-        notifications: true,
-        createdAt: new Date().toISOString()
-      };
-      // Save to localStorage
-      localStorage.setItem('user_user-default', JSON.stringify(defaultUser));
-      localStorage.setItem('user_password_user-default', password);
-    }
-
-    const userData = {
-      ...defaultUser,
-      token: `token_user_${Date.now()}`
-    };
-    return createResponse(userData, true, 'Đăng nhập thành công');
-  }
-
-  // Check regular users
-  const users = getUsersFromStorage();
-  const user = users.find(u => 
-    (u.email === identifier || u.phone === identifier) && 
-    localStorage.getItem(`user_password_${u.id}`) === password
-  );
-
-  if (user) {
-    const userData = {
-      ...user,
-      token: `token_${user.id}_${Date.now()}`
-    };
-    return createResponse(userData, true, 'Đăng nhập thành công');
-  }
-
-  return createError('Số điện thoại/Email hoặc mật khẩu không đúng', 401);
 };
 
-// Register API
-export const registerApi = async (userData) => {
-  await delay(1000);
-
-  const users = getUsersFromStorage();
-  const existingUser = users.find(u => 
-    u.email === userData.email || u.phone === userData.phone
-  );
-
-  if (existingUser) {
-    return createError('Email hoặc số điện thoại đã được sử dụng', 409);
-  }
-
-  const newUser = {
-    ...userData,
-    id: `user_${Date.now()}`,
-    role: 'user',
-    ecoTokens: 0,
-    streak: 0,
-    level: 1,
-    createdAt: new Date().toISOString(),
-    token: `token_${Date.now()}`
-  };
-
-  // Save user
-  localStorage.setItem(`user_${newUser.id}`, JSON.stringify(newUser));
-  if (newUser.password) {
-    localStorage.setItem(`user_password_${newUser.id}`, newUser.password);
-  }
-
-  return createResponse(newUser, true, 'Đăng ký thành công');
-};
-
-// Get current user API
-export const getCurrentUserApi = async () => {
-  await delay(300);
-
-  const userStr = localStorage.getItem('user');
-  if (!userStr) {
-    return createError('Chưa đăng nhập', 401);
-  }
-
-  const user = JSON.parse(userStr);
-  return createResponse(user, true);
-};
-
-// Update user API
-export const updateUserApi = async (userId, updatedData) => {
-  await delay(600);
-
-  const userKey = `user_${userId}`;
-  const userStr = localStorage.getItem(userKey) || localStorage.getItem('user');
-  
-  if (!userStr) {
-    return createError('Không tìm thấy user', 404);
-  }
-
-  const user = JSON.parse(userStr);
-  const updatedUser = { ...user, ...updatedData, updatedAt: new Date().toISOString() };
-
-  // Save updated user
-  localStorage.setItem(`user_${userId}`, JSON.stringify(updatedUser));
-  
-  // Update current user if it's the same
-  const currentUser = localStorage.getItem('user');
-  if (currentUser) {
-    const current = JSON.parse(currentUser);
-    if (current.id === userId) {
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-    }
-  }
-
-  return createResponse(updatedUser, true, 'Cập nhật thông tin thành công');
-};
-
-// Change password API
+/**
+ * Change password API
+ * POST /api/User/change-password
+ */
 export const changePasswordApi = async (userId, oldPassword, newPassword) => {
-  await delay(500);
+  try {
+    // Backend DTO yêu cầu PascalCase và MinLength(8) cho NewPassword
+    // Gửi đúng format để tránh 400 Bad Request
+    const response = await apiPost('/User/change-password', {
+      OldPassword: oldPassword,
+      NewPassword: newPassword,
+      NewPasswordConfirm: newPassword // Backend yêu cầu confirm và Compare với NewPassword
+    }, true); // Cần auth
 
-  const savedPassword = localStorage.getItem(`user_password_${userId}`);
-  
-  if (savedPassword !== oldPassword) {
-    return createError('Mật khẩu cũ không đúng', 400);
+    if (response.success) {
+      return {
+        success: true,
+        message: response.message || 'Đổi mật khẩu thành công'
+      };
+    }
+
+    throw new Error(response.message || 'Đổi mật khẩu thất bại');
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || 'Đổi mật khẩu thất bại'
+    };
   }
-
-  localStorage.setItem(`user_password_${userId}`, newPassword);
-  return createResponse({ success: true }, true, 'Đổi mật khẩu thành công');
 };
 
-// Logout API
+/**
+ * Logout API
+ * (Frontend chỉ cần xóa localStorage)
+ */
 export const logoutApi = async () => {
-  await delay(200);
+  // Backend không có logout endpoint, chỉ cần xóa token ở frontend
   localStorage.removeItem('user');
-  return createResponse({ success: true }, true, 'Đăng xuất thành công');
+  return {
+    success: true,
+    message: 'Đăng xuất thành công'
+  };
 };
-
