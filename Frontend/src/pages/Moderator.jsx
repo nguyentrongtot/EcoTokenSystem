@@ -96,11 +96,26 @@ const Moderator = () => {
     <div key={action.id} className="action-card">
       <div className="action-header">
         <div className="action-user">
-          {action.userAvatarImage ? (
-            <img src={action.userAvatarImage} alt={action.userName} className="user-avatar-image" />
-          ) : (
-            <div className="user-avatar">{action.userAvatar || '🌱'}</div>
-          )}
+          <div className="action-user-avatar-wrapper">
+            {action.userAvatarImage ? (
+              <img 
+                src={action.userAvatarImage} 
+                alt={action.userName} 
+                className="user-avatar-image"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  const fallback = e.target.nextElementSibling;
+                  if (fallback) fallback.style.display = 'flex';
+                }}
+              />
+            ) : null}
+            <div 
+              className="user-avatar"
+              style={{ display: action.userAvatarImage ? 'none' : 'flex' }}
+            >
+              {action.userAvatar || '🌱'}
+            </div>
+          </div>
           <div className="user-info">
             <div className="user-name">{action.userName}</div>
             <div className="action-time">Gửi: {formatDate(action.submittedAt)}</div>
@@ -203,11 +218,26 @@ const Moderator = () => {
       <div className="action-list-content">
         <div className="action-list-header">
           <div className="action-list-user">
-            {action.userAvatarImage ? (
-              <img src={action.userAvatarImage} alt={action.userName} className="list-user-avatar-image" />
-            ) : (
-              <div className="list-user-avatar">{action.userAvatar || '🌱'}</div>
-            )}
+            <div className="action-list-user-avatar-wrapper">
+              {action.userAvatarImage ? (
+                <img 
+                  src={action.userAvatarImage} 
+                  alt={action.userName} 
+                  className="list-user-avatar-image"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    const fallback = e.target.nextElementSibling;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className="list-user-avatar"
+                style={{ display: action.userAvatarImage ? 'none' : 'flex' }}
+              >
+                {action.userAvatar || '🌱'}
+              </div>
+            </div>
             <span className="list-user-name">{action.userName}</span>
           </div>
           <div className={`list-status-badge status-${action.status}`}>

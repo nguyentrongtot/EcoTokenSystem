@@ -21,6 +21,72 @@
   margin: 0;
 }
 
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 600px;
+  margin: 0 auto 25px;
+  position: relative;
+}
+
+.search-bar .search-icon {
+  color: #666;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  padding: 12px 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 25px;
+  font-size: 1em;
+  transition: all 0.3s;
+  background: white;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #4a7c2a;
+  box-shadow: 0 0 0 3px rgba(74, 124, 42, 0.1);
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+.clear-search {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #999;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.3s;
+  padding: 0;
+  font-size: 14px;
+}
+
+.clear-search:hover {
+  background: #666;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.search-results-info {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #666;
+  font-size: 0.95em;
+}
+
 .history-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -281,7 +347,134 @@
   line-height: 1.6;
 }
 
-@media (max-width: 768px) {
+.action-content-section {
+  margin-top: 15px;
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 10px;
+  border-left: 4px solid #4a7c2a;
+}
+
+.content-label {
+  font-weight: 600;
+  color: #2d5016;
+  margin-bottom: 8px;
+  font-size: 0.95em;
+}
+
+.content-text {
+  color: #333;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.rejection-reason-section {
+  margin-top: 15px;
+  padding: 15px;
+  background: #fff5f5;
+  border-radius: 10px;
+  border-left: 4px solid #e74c3c;
+}
+
+.rejection-reason-label {
+  font-weight: 600;
+  color: #721c24;
+  margin-bottom: 8px;
+  font-size: 0.95em;
+}
+
+.rejection-reason-text {
+  color: #721c24;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .history-container {
+    padding: var(--spacing-md);
+  }
+
+  .history-tabs {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: var(--spacing-md);
+    gap: var(--spacing-xs);
+    scrollbar-width: none;
+  }
+
+  .history-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .history-tabs button {
+    white-space: nowrap;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    font-size: var(--font-size-sm);
+  }
+
+  .history-stats {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+
+  .stat-card {
+    padding: var(--spacing-lg);
+  }
+
+  .action-item {
+    flex-direction: column;
+    padding: var(--spacing-lg);
+    gap: var(--spacing-md);
+  }
+
+  .action-image-section {
+    width: 100%;
+  }
+
+  .action-image,
+  .image-placeholder {
+    height: 200px;
+    font-size: 3em;
+  }
+
+  .action-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .action-info h3 {
+    font-size: 1.1em;
+  }
+
+  .status-badge {
+    padding: 6px 12px;
+    font-size: 0.85em;
+  }
+
+  .rewards-section {
+    padding: var(--spacing-md);
+  }
+
+  .rewards-details {
+    gap: var(--spacing-sm);
+  }
+
+  .reward-item {
+    padding: 6px 12px;
+    font-size: 0.9em;
+  }
+}
+
+/* Tablets */
+@media (min-width: 481px) and (max-width: 768px) {
+  .history-container {
+    padding: var(--spacing-lg);
+  }
+
   .action-item {
     flex-direction: column;
   }
@@ -301,17 +494,25 @@
   }
 
   .history-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-lg);
   }
 
   .history-tabs {
     justify-content: flex-start;
     overflow-x: auto;
-    padding-bottom: 10px;
+    padding-bottom: var(--spacing-md);
   }
 
   .history-tabs button {
     white-space: nowrap;
+  }
+}
+
+/* Desktop optimization */
+@media (min-width: 769px) {
+  .history-stats {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

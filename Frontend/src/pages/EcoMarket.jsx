@@ -1,26 +1,29 @@
 import { useState, useEffect } from 'react';
+import { Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGiftHistory } from '../context/GiftHistoryContext';
 import { useConfig } from '../context/ConfigContext';
 import { getGiftsApi, exchangeGiftApi } from '../api/giftsApi';
 import { getCurrentUserApi } from '../api/authApi';
+import { showSuccess, showError, showWarning } from '../utils/toast';
 import './EcoMarket.css';
 
 const EcoMarket = () => {
-  const { user, login, updateUser } = useAuth();
+  const { user, login, refreshUser } = useAuth();
   const { loadGiftHistory } = useGiftHistory();
   const { getGiftPrice } = useConfig();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [gifts, setGifts] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const categories = ['all', 'handmade', 'vouchers', 'books', 'movies', 'donations'];
 
   // Helper function để lấy thông tin tag (giống Admin)
   const getTagInfo = (tag) => {
     const tagMap = {
-      handmade: { emoji: '🎨', name: 'Handmade', color: '#e91e63' },
-      vouchers: { emoji: '🎫', name: 'Voucher', color: '#2196f3' },
+      handmade: { emoji: '🎨', name: 'Thủ công', color: '#e91e63' },
+      vouchers: { emoji: '🎫', name: 'Phiếu khuyến mãi', color: '#2196f3' },
       books: { emoji: '📚', name: 'Sách', color: '#9c27b0' },
       movies: { emoji: '🎬', name: 'Phim', color: '#f44336' },
       donations: { emoji: '❤️', name: 'Quyên góp', color: '#ff5722' }
@@ -54,14 +57,30 @@ const EcoMarket = () => {
     loadGifts();
   }, []);
 
-  // Filter gifts by tag (thay vì category)
-  const filteredGifts = selectedCategory === 'all'
-    ? gifts
-    : gifts.filter(gift => (gift.tag || gift.category || 'handmade') === selectedCategory);
+  // Filter gifts by tag and search term
+  const filteredGifts = gifts
+    .filter(gift => {
+      // Filter by category
+      if (selectedCategory !== 'all') {
+        return (gift.tag || gift.category || 'handmade') === selectedCategory;
+      }
+      return true;
+    })
+    .filter(gift => {
+      // Filter by search term
+      if (!searchTerm.trim()) return true;
+
+      const search = searchTerm.toLowerCase();
+      const name = (gift.name || '').toLowerCase();
+      const description = (gift.description || '').toLowerCase();
+      const tag = (gift.tag || gift.category || '').toLowerCase();
+
+      return name.includes(search) || description.includes(search) || tag.includes(search);
+    });
 
   const handleExchange = async (gift) => {
     if (!user) {
-      alert('Vui lòng đăng nhập để đổi quà');
+      showWarning('Vui lòng đăng nhập để đổi quà');
       return;
     }
 
@@ -69,12 +88,12 @@ const EcoMarket = () => {
     const userPoints = user.currentPoints || user.ecoTokens || 0;
 
     if (userPoints < price) {
-      alert(`Bạn không đủ Eco Tokens! Cần ${price} tokens, bạn có ${userPoints} tokens.`);
+      showWarning(`Bạn không đủ Eco Tokens! Cần ${price} tokens, bạn có ${userPoints} tokens.`);
       return;
     }
 
     if (gift.stock <= 0) {
-      alert('Quà đã hết hàng!');
+      showError('Quà đã hết hàng!');
       return;
     }
 
@@ -85,21 +104,19 @@ const EcoMarket = () => {
         
         if (response.success) {
           // Refresh toàn bộ user data từ API để đồng bộ tokens và streak với database
-          const userResponse = await getCurrentUserApi();
-          if (userResponse.success && userResponse.data) {
-            await updateUser(userResponse.data);
-          }
-          
+          await refreshUser();  // ✅ ĐÚNG: Chỉ GET, không PATCH
+
           // Reload gift history từ API (backend đã tự động tạo ItemsHistory)
           await loadGiftHistory(user.id);
-          
+
+          const userResponse = await getCurrentUserApi();
           const remainingTokens = userResponse.data?.ecoTokens || userResponse.data?.currentPoints || response.data?.remainingTokens || 0;
-          alert(response.message || `Đổi quà thành công! Bạn còn ${remainingTokens} Eco Tokens.`);
+          showSuccess(response.message || `Đổi quà thành công! Bạn còn ${remainingTokens} Eco Tokens.`);
         } else {
-          alert(response.message || 'Có lỗi xảy ra khi đổi quà');
+          showError(response.message || 'Có lỗi xảy ra khi đổi quà');
         }
       } catch (error) {
-        alert(error.message || 'Có lỗi xảy ra khi đổi quà');
+        showError(error.message || 'Có lỗi xảy ra khi đổi quà');
       } finally {
         setLoading(false);
       }
@@ -109,7 +126,7 @@ const EcoMarket = () => {
   return (
     <div className="market-container">
       <div className="market-header">
-        <h1>🛍️ Eco Market</h1>
+        <h1>🛍️ Cửa hàng</h1>
         <p>Đổi Eco Tokens lấy quà tặng thân thiện môi trường</p>
         {user && (
           <div className="user-tokens">
@@ -119,22 +136,50 @@ const EcoMarket = () => {
         )}
       </div>
 
-      <div className="category-filter">
-        {categories.map(category => (
-          <button
-            key={category}
-            className={`category-btn ${selectedCategory === category ? 'active' : ''}`}
-            onClick={() => setSelectedCategory(category)}
-          >
-            {category === 'all' ? 'Tất cả' :
-             category === 'handmade' ? 'Handmade' :
-             category === 'vouchers' ? 'Voucher' :
-             category === 'books' ? 'Sách' :
-             category === 'movies' ? 'Phim' :
-             'Quyên góp'}
-          </button>
-        ))}
+      <div className="search-filter-section">
+        <div className="search-bar">
+          <Search size={20} className="search-icon" />
+          <input
+            type="text"
+            placeholder="Tìm kiếm sản phẩm theo tên, mô tả..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-input"
+          />
+          {searchTerm && (
+            <button
+              className="clear-search"
+              onClick={() => setSearchTerm('')}
+              title="Xóa tìm kiếm"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        <div className="category-filter">
+          {categories.map(category => (
+            <button
+              key={category}
+              className={`category-btn ${selectedCategory === category ? 'active' : ''}`}
+              onClick={() => setSelectedCategory(category)}
+            >
+              {category === 'all' ? 'Tất cả' :
+               category === 'handmade' ? 'Thủ công' :
+               category === 'vouchers' ? 'Phiếu khuyến mãi' :
+               category === 'books' ? 'Sách' :
+               category === 'movies' ? 'Phim' :
+               'Quyên góp'}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {searchTerm && (
+        <div className="search-results-info">
+          Tìm thấy <strong>{filteredGifts.length}</strong> sản phẩm cho "{searchTerm}"
+        </div>
+      )}
 
       <div className="gifts-grid">
         {filteredGifts.map(gift => {

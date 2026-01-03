@@ -1,26 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useActions } from '../context/ActionsContext';
 import { getCurrentUserApi } from '../api/authApi';
 import { formatDate } from '../utils/dateUtils';
+import { Search } from 'lucide-react';
 import './ActionHistory.css';
 
 const ActionHistory = () => {
-  const { user, updateUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { getUserActions } = useActions();
   const [activeTab, setActiveTab] = useState('pending'); // Default to 'pending' to show newly submitted actions
   const [error, setError] = useState(null);
   const [allActions, setAllActions] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Refresh user data khi vào trang để đồng bộ streak và tokens
   useEffect(() => {
     const refreshUserData = async () => {
       try {
-        const response = await getCurrentUserApi();
-        if (response.success && response.data) {
-          // Update user trong AuthContext để đồng bộ streak và tokens
-          await updateUser(response.data);
-        }
+        await refreshUser();  // ✅ ĐÚNG: Chỉ GET, không PATCH
       } catch (err) {
         console.error('Error refreshing user data:', err);
         // Không hiển thị lỗi cho user, chỉ log
@@ -30,7 +28,7 @@ const ActionHistory = () => {
     if (user?.id) {
       refreshUserData();
     }
-  }, [user?.id, updateUser]);
+  }, [user?.id, refreshUser]);
 
   useEffect(() => {
     const loadActions = async () => {
@@ -54,13 +52,25 @@ const ActionHistory = () => {
   const rejectedActions = allActions.filter(action => action && action.status === 'rejected');
   const pendingActions = allActions.filter(action => action && action.status === 'pending');
 
-  const displayedActions = activeTab === 'all' 
+  const displayedActionsBase = activeTab === 'all' 
     ? allActions 
     : activeTab === 'approved' 
     ? approvedActions 
     : activeTab === 'rejected' 
     ? rejectedActions 
     : pendingActions;
+
+  // Filter displayed actions based on search term
+  const displayedActions = useMemo(() => {
+    if (!searchTerm.trim()) return displayedActionsBase;
+    
+    const term = searchTerm.toLowerCase();
+    return displayedActionsBase.filter(action => {
+      const description = (action.description || '').toLowerCase();
+      const comment = (action.comment || '').toLowerCase();
+      return description.includes(term) || comment.includes(term);
+    });
+  }, [displayedActionsBase, searchTerm]);
 
   // Tính tổng tokens từ các actions đã được duyệt
   // Lưu ý: Streak được tính theo ngày liên tiếp (không phải tổng từ các actions)
@@ -111,6 +121,33 @@ const ActionHistory = () => {
         <h1>📸 Lịch sử hành động</h1>
         <p>Xem lại các hành động xanh bạn đã gửi và kết quả duyệt</p>
       </div>
+
+      {/* Search Bar */}
+      <div className="search-bar">
+        <Search size={20} className="search-icon" />
+        <input
+          type="text"
+          placeholder="Tìm kiếm theo nội dung hành động..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
+        {searchTerm && (
+          <button
+            className="clear-search"
+            onClick={() => setSearchTerm('')}
+            title="Xóa tìm kiếm"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {searchTerm && (
+        <div className="search-results-info">
+          Tìm thấy <strong>{displayedActions.length}</strong> hành động cho "{searchTerm}"
+        </div>
+      )}
 
       {error && (
         <div className="error-message" style={{ margin: '20px', padding: '15px', background: '#fee', color: '#c33', borderRadius: '8px' }}>
@@ -194,17 +231,29 @@ const ActionHistory = () => {
               <div className="action-content">
                 <div className="action-header-row">
                   <div className="action-info">
-                    <h3>{action.description || 'Hành động sống xanh'}</h3>
+                    <h3>{action.title || action.description || 'Hành động sống xanh'}</h3>
                     <div className="action-meta">
                       <span className="meta-item">📅 {formatDate(action.submittedAt)}</span>
                       {action.reviewedAt && (
                         <span className="meta-item">👮 Duyệt: {formatDate(action.reviewedAt)}</span>
+                      )}
+                      {action.status === 'approved' && action.adminId && (
+                        <span className="meta-item">✅ Đã duyệt bởi moderator</span>
                       )}
                     </div>
                   </div>
                   {getStatusBadge(action.status)}
                 </div>
 
+                {/* Hiển thị nội dung cho bài chờ duyệt */}
+                {action.status === 'pending' && (action.content || action.title) && (
+                  <div className="action-content-section">
+                    <div className="content-label">📝 Nội dung bài viết:</div>
+                    <div className="content-text">{action.content || action.title || action.description}</div>
+                  </div>
+                )}
+
+                {/* Hiển thị phần thưởng cho bài đã duyệt */}
                 {action.status === 'approved' && action.rewards && (
                   <div className="rewards-section">
                     <div className="rewards-title">🎁 Phần thưởng nhận được:</div>
@@ -215,7 +264,26 @@ const ActionHistory = () => {
                   </div>
                 )}
 
-                {action.comment && (
+                {/* Hiển thị nội dung và lí do từ chối cho bài bị từ chối */}
+                {action.status === 'rejected' && (
+                  <>
+                    {(action.content || action.title) && (
+                      <div className="action-content-section">
+                        <div className="content-label">📝 Nội dung bài viết:</div>
+                        <div className="content-text">{action.content || action.title || action.description}</div>
+                      </div>
+                    )}
+                    {action.rejectionReason && (
+                      <div className="rejection-reason-section">
+                        <div className="rejection-reason-label">❌ Lí do từ chối:</div>
+                        <div className="rejection-reason-text">{action.rejectionReason}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Nhận xét từ moderator (nếu có) */}
+                {action.comment && action.status !== 'rejected' && (
                   <div className={`moderator-comment ${action.status === 'approved' ? 'approved' : 'rejected'}`}>
                     <strong>Nhận xét từ moderator:</strong>
                     <p>{action.comment}</p>

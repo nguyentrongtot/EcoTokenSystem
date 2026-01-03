@@ -2,13 +2,14 @@
 // USERS API - GỌI BACKEND THẬT (Admin)
 // ============================================
 import { apiGet, apiPost, apiPatch, apiDelete } from './apiClient';
+import { getAvatarImageUrl, normalizeImageUrl } from '../utils/imageUtils';
 
 /**
  * Map UserListDTO từ backend sang format frontend
  */
 const mapUserResponse = (backendUser) => {
   const avatar = backendUser.Avatar || backendUser.avatar || '🌱';
-  const avatarImage = (avatar && avatar.startsWith('data:image')) ? avatar : null;
+  const avatarImage = getAvatarImageUrl(avatar);
   return {
     id: backendUser.Id || backendUser.id,
     userId: backendUser.Id || backendUser.id,
@@ -97,11 +98,18 @@ export const createModeratorApi = async (moderatorData) => {
     console.log('[createModeratorApi] Request:', { username, roleId, hasPassword: !!moderatorData.password });
 
     try {
-      const response = await apiPost(`/User/admin/create?roleId=${roleId}`, {
+      const requestData = {
         username: username,
         password: moderatorData.password,
         passwordConfirm: moderatorData.password
-      }, true); // Cần auth (Admin)
+      };
+      
+      // Add name/nickname if provided
+      if (moderatorData.nickname) {
+        requestData.name = moderatorData.nickname;
+      }
+
+      const response = await apiPost(`/User/admin/create?roleId=${roleId}`, requestData, true); // Cần auth (Admin)
 
       console.log('[createModeratorApi] Response:', response);
 
@@ -320,15 +328,24 @@ export const getLeaderboardApi = async (sortBy = 'tokens', limit = null) => {
       }
 
       // Map để đảm bảo format nhất quán (backend đã có JsonPropertyName nhưng vẫn cần fallback)
-      const mappedLeaderboard = leaderboard.map(entry => ({
-        userId: entry.userId || entry.UserId,
-        userName: entry.userName || entry.UserName || 'Người dùng',
-        userAvatar: entry.userAvatar || entry.UserAvatar || '🌱',
-        userAvatarImage: entry.userAvatarImage || entry.UserAvatarImage || null,
-        currentPoints: entry.currentPoints !== undefined ? entry.currentPoints : (entry.CurrentPoints || 0),
-        streak: entry.streak !== undefined ? entry.streak : (entry.Streak || 0),
-        rank: entry.rank !== undefined ? entry.rank : (entry.Rank || 0)
-      }));
+      const mappedLeaderboard = leaderboard.map(entry => {
+        const userAvatar = entry.userAvatar || entry.UserAvatar || '🌱';
+        const userAvatarImageRaw = entry.userAvatarImage || entry.UserAvatarImage;
+        // Normalize userAvatarImage giống như Admin - nếu là base64 giữ nguyên, nếu là URL thì normalize
+        const userAvatarImage = userAvatarImageRaw
+          ? (userAvatarImageRaw.startsWith('data:image') ? userAvatarImageRaw : normalizeImageUrl(userAvatarImageRaw))
+          : getAvatarImageUrl(userAvatar); // Fallback: kiểm tra xem userAvatar có phải là image URL không
+        
+        return {
+          userId: entry.userId || entry.UserId,
+          userName: entry.userName || entry.UserName || 'Người dùng',
+          userAvatar: userAvatar,
+          userAvatarImage: userAvatarImage,
+          currentPoints: entry.currentPoints !== undefined ? entry.currentPoints : (entry.CurrentPoints || 0),
+          streak: entry.streak !== undefined ? entry.streak : (entry.Streak || 0),
+          rank: entry.rank !== undefined ? entry.rank : (entry.Rank || 0)
+        };
+      });
 
       return {
         success: true,

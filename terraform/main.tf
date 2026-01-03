@@ -204,7 +204,7 @@ resource "aws_ecs_cluster" "main" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"
   }
 
   tags = {
@@ -215,7 +215,7 @@ resource "aws_ecs_cluster" "main" {
 # CloudWatch Log Group for ECS
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/ecotokensystem-backend"
-  retention_in_days = 7
+  retention_in_days = 3
 
   tags = {
     Name = "ecotokensystem-ecs-logs"
@@ -271,6 +271,37 @@ resource "aws_iam_role" "ecs_task_role" {
   }
 }
 
+# IAM policy for S3 uploads access
+resource "aws_iam_policy" "s3_uploads_access" {
+  name        = "ecotokensystem-s3-uploads-access"
+  description = "Allow ECS tasks to read/write/delete from uploads bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "${aws_s3_bucket.uploads.arn}",
+          "${aws_s3_bucket.uploads.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Attach policy to ECS task role
+resource "aws_iam_role_policy_attachment" "ecs_task_role_s3_uploads" {
+  role       = aws_iam_role.ecs_task_role.name
+  policy_arn = aws_iam_policy.s3_uploads_access.arn
+}
+
 # ECS Task Definition
 resource "aws_ecs_task_definition" "backend" {
   family                   = "ecotokensystem-backend"
@@ -321,6 +352,22 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "JwtSettings__ExpiryMinutes"
           value = "60"
+        },
+        {
+          name  = "AWS__Region"
+          value = var.aws_region
+        },
+        {
+          name  = "AWS__S3BucketName"
+          value = aws_s3_bucket.uploads.id
+        },
+        {
+          name  = "AWS__CloudFrontDomain"
+          value = aws_cloudfront_distribution.uploads.domain_name
+        },
+        {
+          name  = "AWS__UseS3Storage"
+          value = "true"
         }
       ]
 
@@ -424,7 +471,7 @@ resource "aws_ecs_service" "backend" {
   name            = "ecotokensystem-backend-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = 2  # Run 2 tasks for high availability
+  desired_count   = 1  # Single task for cost optimization
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -439,8 +486,8 @@ resource "aws_ecs_service" "backend" {
     container_port   = 8080
   }
 
-  deployment_minimum_healthy_percent = 100  # Keep old task running until new one is healthy
-  deployment_maximum_percent         = 200  # Allow 2 tasks during deployment
+  deployment_minimum_healthy_percent = 0    # Allow downtime during deployment for cost savings
+  deployment_maximum_percent         = 100  # Only 1 task maximum
 
   health_check_grace_period_seconds = 240   # 4 minutes for database migrations and startup
 
@@ -659,4 +706,133 @@ output "frontend_url" {
 output "s3_bucket_name" {
   description = "S3 bucket name for frontend"
   value       = aws_s3_bucket.frontend.id
+}
+
+# ============================================
+# S3 BUCKET FOR USER UPLOADS (Images)
+# ============================================
+
+resource "aws_s3_bucket" "uploads" {
+  bucket = var.s3_uploads_bucket_name
+
+  tags = {
+    Name = "ecotokensystem-uploads"
+  }
+}
+
+# Block public access - only via CloudFront
+resource "aws_s3_bucket_public_access_block" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Enable versioning (data protection)
+resource "aws_s3_bucket_versioning" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  versioning_configuration {
+    status = "Suspended"  # Suspended for cost optimization
+  }
+}
+
+# CORS for uploads bucket
+resource "aws_s3_bucket_cors_configuration" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
+# CloudFront OAI for uploads
+resource "aws_cloudfront_origin_access_identity" "uploads" {
+  comment = "OAI for EcoTokenSystem uploads"
+}
+
+# S3 bucket policy - allow CloudFront
+resource "aws_s3_bucket_policy" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontOAI"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_cloudfront_origin_access_identity.uploads.iam_arn
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.uploads.arn}/*"
+      }
+    ]
+  })
+}
+
+# CloudFront distribution for uploads
+resource "aws_cloudfront_distribution" "uploads" {
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = "EcoTokenSystem Uploads CDN"
+  price_class         = "PriceClass_100"
+
+  origin {
+    domain_name = aws_s3_bucket.uploads.bucket_regional_domain_name
+    origin_id   = "S3-${aws_s3_bucket.uploads.id}"
+
+    s3_origin_config {
+      origin_access_identity = aws_cloudfront_origin_access_identity.uploads.cloudfront_access_identity_path
+    }
+  }
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "S3-${aws_s3_bucket.uploads.id}"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 86400      # 1 day
+    max_ttl                = 31536000   # 1 year
+    compress               = true
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  tags = {
+    Name = "ecotokensystem-uploads-cdn"
+  }
+}
+
+output "s3_uploads_bucket_name" {
+  description = "S3 bucket name for uploads"
+  value       = aws_s3_bucket.uploads.id
+}
+
+output "uploads_cloudfront_domain" {
+  description = "CloudFront domain for uploads"
+  value       = aws_cloudfront_distribution.uploads.domain_name
 }

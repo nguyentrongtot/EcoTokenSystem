@@ -17,7 +17,7 @@ namespace EcoTokenSystem.Application.Services
     public class PostService : IPostInterface
     {
         private readonly ApplicationDbContext _context;
-        private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly IStorageService _storageService;
         private readonly ILogger<PostService> _logger;
         // Giữ nguyên hằng số Max File Size
         private const long MaxFileSize = 5 * 1024 * 1024;
@@ -25,38 +25,17 @@ namespace EcoTokenSystem.Application.Services
         private const int PendingStatusId = 1; // Pending status
         private const int RejectedStatusId = 3; // Rejected status
 
-        public PostService(ApplicationDbContext context, IWebHostEnvironment webHostEnvironment, ILogger<PostService> logger)
+        public PostService(ApplicationDbContext context, IStorageService storageService, ILogger<PostService> logger)
         {
             _context = context;
-            _webHostEnvironment = webHostEnvironment;
+            _storageService = storageService;
             _logger = logger;
         }
 
         // --- HÀM PRIVATE: XỬ LÝ FILE UPLOAD ---
         private async Task<string> SaveNewImageAsync(IFormFile imageFile)
         {
-            if (imageFile.Length > MaxFileSize)
-            {
-                throw new InvalidOperationException("Dung lượng tệp tối đa là 5MB.");
-            }
-
-            string uploadFolder = Path.Combine(_webHostEnvironment.WebRootPath, "images"); // Thư mục chung
-            if (!Directory.Exists(uploadFolder))
-            {
-                Directory.CreateDirectory(uploadFolder);
-            }
-
-            // Khắc phục LỖI BẢO MẬT: Tạo tên file DUY NHẤT bằng GUID
-            string extension = Path.GetExtension(imageFile.FileName);
-            string uniqueFileName = Guid.NewGuid().ToString() + extension;
-            string filePath = Path.Combine(uploadFolder, uniqueFileName);
-
-            using (var fileStream = new FileStream(filePath, FileMode.Create))
-            {
-                await imageFile.CopyToAsync(fileStream);
-            }
-
-            return $"/images/{uniqueFileName}";
+            return await _storageService.UploadImageAsync(imageFile, "posts");
         }
 
         // --- 1. TẠO BÀI ĐĂNG (CreatePostAsync) ---
@@ -199,6 +178,12 @@ namespace EcoTokenSystem.Application.Services
 
                 postDomain.AwardedPoints = request.AwardedPoints;
 
+                // ✅ SỬA LỖI STREAK: Lưu post vào DB TRƯỚC KHI tính streak
+                // Để query trong UpdateUserStreakAsync có thể thấy post mới được approve
+                _context.Posts.Update(postDomain);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation($"[ApproveRejectPostAsync] Saved post {postId} with ApprovedRejectedAt before calculating streak");
+
                 // A. CẬP NHẬT ĐIỂM
                 var oldPoints = authorDomain.CurrentPoints;
                 authorDomain.CurrentPoints += request.AwardedPoints;
@@ -218,17 +203,19 @@ namespace EcoTokenSystem.Application.Services
                 await _context.PointHistories.AddAsync(pointHistory);
                 _logger.LogInformation($"[ApproveRejectPostAsync] Added PointHistory: {pointHistory.Id}, PointsChange: {pointHistory.PointsChange}");
 
-                // C. XỬ LÝ LOGIC STREAK
-                await UpdateUserStreakAsync(authorDomain); // Bỏ qua SubmittedAt, dùng ApprovedAt/UtcNow
+                // C. XỬ LÝ LOGIC STREAK (sau khi post đã được lưu vào DB)
+                await UpdateUserStreakAsync(authorDomain); // Bây giờ query sẽ bao gồm post mới được approve
+
+                // LƯU CÁC THAY ĐỔI CÒN LẠI: points, pointHistory, streak
+                await _context.SaveChangesAsync();
+                _logger.LogInformation($"[ApproveRejectPostAsync] Saved user points, pointHistory, and streak updates");
             }
             else if (request.StatusId == 3) // REJECT (3)
             {
                 postDomain.RejectionReason = request.RejectReason;
+                _context.Posts.Update(postDomain);
+                await _context.SaveChangesAsync();
             }
-
-            // LƯU TRANSACTION DUY NHẤT
-            _context.Posts.Update(postDomain);
-            await _context.SaveChangesAsync();
 
             return new ResponseDTO()
             {
@@ -240,45 +227,64 @@ namespace EcoTokenSystem.Application.Services
         // --- 3. LOGIC STREAK (UpdateUserStreakAsync) ---
         private async Task UpdateUserStreakAsync(User userDomain)
         {
-            var currentApprovedDate = DateTime.UtcNow.Date;
+            var today = DateTime.UtcNow.Date;
+            var yesterday = today.AddDays(-1);
 
-            // 1. Tìm ngày ApprovedRejectedAt gần nhất của User
-            // Lấy 2 bài gần nhất để so sánh (bài vừa duyệt, và bài trước đó)
-            var lastApprovedPostDate = await _context.Posts
-                .Where(p => p.UserId == userDomain.Id && p.StatusId == ApprovedStatusId)
-                .OrderByDescending(p => p.ApprovedRejectedAt)
-                .Select(p => p.ApprovedRejectedAt)
-                .FirstOrDefaultAsync();
+            // Lấy tất cả các ngày unique có bài được duyệt, sắp xếp giảm dần (mới nhất trước)
+            var approvedDates = await _context.Posts
+                .Where(p => p.UserId == userDomain.Id && p.StatusId == ApprovedStatusId && p.ApprovedRejectedAt.HasValue)
+                .Select(p => p.ApprovedRejectedAt.Value.Date)
+                .Distinct()
+                .OrderByDescending(d => d)
+                .ToListAsync();
 
-            // 2. Xử lý logic Streak
-
-            // Kiểm tra và lấy giá trị Date, nếu nó có giá trị
-            DateTime? previousApprovedDate = lastApprovedPostDate?.Date;
-
-            if (!previousApprovedDate.HasValue)
+            if (approvedDates == null || !approvedDates.Any())
             {
-                // Trường hợp lần đầu được duyệt thành công
-                userDomain.Streak = 1;
-            }
-            else
-            {
-                // Bây giờ đã chắc chắn previousApprovedDate có giá trị (DateTime)
-                var previousDate = previousApprovedDate.Value; // Lấy giá trị DateTime
-                var timeDifference = currentApprovedDate - previousDate;
-
-                if (timeDifference.Days == 1)
-                {
-                    // Duyệt liên tiếp 1 ngày
-                    userDomain.Streak += 1;
-                }
-                else if (timeDifference.Days > 1)
-                {
-                    // Bị đứt quãng
-                    userDomain.Streak = 1;
-                }
-                // timeDifference.Days == 0: Giữ nguyên Streak
+                // Trường hợp không có bài nào được duyệt, streak = 0
+                userDomain.Streak = 0;
+                _context.Users.Update(userDomain);
+                return;
             }
 
+            var mostRecentDate = approvedDates[0];
+            int daysSinceMostRecent = (today - mostRecentDate).Days;
+
+            // Chỉ tính streak nếu ngày gần nhất là hôm nay hoặc hôm qua
+            // Nếu ngày gần nhất cách quá xa (hơn 1 ngày), streak = 0 (không còn streak liên tiếp)
+            if (daysSinceMostRecent > 1)
+            {
+                // Bài được duyệt cách quá xa, không còn streak liên tiếp
+                userDomain.Streak = 0;
+                _context.Users.Update(userDomain);
+                return;
+            }
+
+            // Tính số ngày liên tiếp từ ngày gần nhất ngược lại về quá khứ
+            int streak = 1; // Bắt đầu từ 1 (ngày gần nhất)
+            
+            // Bắt đầu từ ngày đầu tiên (gần nhất)
+            DateTime currentDate = mostRecentDate;
+            
+            // Đếm số ngày liên tiếp
+            for (int i = 1; i < approvedDates.Count; i++)
+            {
+                DateTime nextDate = approvedDates[i];
+                int daysDiff = (currentDate - nextDate).Days;
+                
+                if (daysDiff == 1)
+                {
+                    // Ngày liên tiếp, tăng streak
+                    streak++;
+                    currentDate = nextDate;
+                }
+                else
+                {
+                    // Bị đứt quãng, dừng lại
+                    break;
+                }
+            }
+
+            userDomain.Streak = streak;
             _context.Users.Update(userDomain);
         }
 
@@ -337,8 +343,17 @@ namespace EcoTokenSystem.Application.Services
                 RejectionReason = post.RejectionReason,
                 // Thêm thông tin User nếu có
                 UserName = post.User?.Name ?? string.Empty,
-                UserAvatar = post.User?.Avatar ?? string.Empty,
-                UserAvatarImage = !string.IsNullOrEmpty(post.User?.Avatar) && post.User.Avatar.StartsWith("data:image") ? post.User.Avatar : null,
+                // Phân biệt avatar: nếu là URL (http/https) hoặc base64 (data:image) → UserAvatarImage, còn lại (emoji) → UserAvatar
+                UserAvatar = !string.IsNullOrEmpty(post.User?.Avatar) && 
+                             !post.User.Avatar.StartsWith("data:image") && 
+                             !post.User.Avatar.StartsWith("http://") && 
+                             !post.User.Avatar.StartsWith("https://") 
+                             ? post.User.Avatar : "🌱", // Emoji default nếu là URL hoặc base64
+                UserAvatarImage = !string.IsNullOrEmpty(post.User?.Avatar) && 
+                                 (post.User.Avatar.StartsWith("data:image") || 
+                                  post.User.Avatar.StartsWith("http://") || 
+                                  post.User.Avatar.StartsWith("https://")) 
+                                 ? post.User.Avatar : null,
                 // Like and Comment information
                 LikesCount = post.Likes?.Count ?? 0,
                 Comments = post.Comments?.Select(c => new CommentDTO
@@ -347,8 +362,17 @@ namespace EcoTokenSystem.Application.Services
                     PostId = c.PostId,
                     UserId = c.UserId,
                     UserName = c.User?.Name ?? "Người dùng",
-                    UserAvatar = c.User?.Avatar ?? string.Empty,
-                    UserAvatarImage = !string.IsNullOrEmpty(c.User?.Avatar) && c.User.Avatar.StartsWith("data:image") ? c.User.Avatar : null,
+                    // Phân biệt avatar: nếu là URL (http/https) hoặc base64 (data:image) → UserAvatarImage, còn lại (emoji) → UserAvatar
+                    UserAvatar = !string.IsNullOrEmpty(c.User?.Avatar) && 
+                                 !c.User.Avatar.StartsWith("data:image") && 
+                                 !c.User.Avatar.StartsWith("http://") && 
+                                 !c.User.Avatar.StartsWith("https://") 
+                                 ? c.User.Avatar : "🌱", // Emoji default nếu là URL hoặc base64
+                    UserAvatarImage = !string.IsNullOrEmpty(c.User?.Avatar) && 
+                                     (c.User.Avatar.StartsWith("data:image") || 
+                                      c.User.Avatar.StartsWith("http://") || 
+                                      c.User.Avatar.StartsWith("https://")) 
+                                     ? c.User.Avatar : null,
                     Content = c.Content,
                     CreatedAt = c.CreatedAt
                 }).ToList() ?? new List<CommentDTO>(),

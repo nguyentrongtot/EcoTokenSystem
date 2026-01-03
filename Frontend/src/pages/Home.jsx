@@ -4,11 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { useActions } from '../context/ActionsContext';
 import { useConfig } from '../context/ConfigContext';
 import { getCurrentUserApi } from '../api/authApi';
+import { Coins, Flame, Camera, Lightbulb, Bike, Coffee, TreePine, Recycle, Droplet, ShoppingBag as Bag } from 'lucide-react';
+import { TOKEN_EMOJI, STREAK_EMOJI } from '../constants/branding';
 import Calendar from '../components/Calendar';
 import './Home.css';
 
 const Home = () => {
-  const { user, updateUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { addPendingAction, getUserActions } = useActions();
   const { config } = useConfig();
   const navigate = useNavigate();
@@ -22,20 +24,17 @@ const Home = () => {
   useEffect(() => {
     const refreshUserData = async () => {
       try {
-        const response = await getCurrentUserApi();
-        if (response.success && response.data) {
-          await updateUser(response.data);
-        }
+        await refreshUser();  // ✅ ĐÚNG: Chỉ GET, không PATCH
       } catch (error) {
         console.error('Error refreshing user data:', error);
         // Không hiển thị lỗi cho user, chỉ log
       }
     };
-    
+
     if (user?.id) {
       refreshUserData();
     }
-  }, [user?.id, updateUser]);
+  }, [user?.id, refreshUser]);
 
   // Workflow: Lấy thông tin các bài viết được duyệt của user -> Lấy ngày giờ -> Tính toán và hiển thị
   useEffect(() => {
@@ -266,13 +265,15 @@ const Home = () => {
   return (
     <div className="home-container">
       <div className="home-header">
-        <h1>Chào mừng, {user?.nickname || 'Người Dùng'}! 🌱</h1>
+        <h1>Chào mừng, {user?.nickname || 'Người Dùng'}!</h1>
         <p>Hãy tiếp tục hành trình sống xanh của bạn</p>
       </div>
 
       <div className="stats-grid">
         <div className="stat-card eco-tokens">
-          <div className="stat-icon">🪙</div>
+          <div className="stat-icon">
+            <Coins size={32} strokeWidth={2} />
+          </div>
           <div className="stat-content">
             <h3>Eco Tokens</h3>
             <p className="stat-value">{user?.ecoTokens || 0}</p>
@@ -281,7 +282,9 @@ const Home = () => {
         </div>
 
         <div className="stat-card streak">
-          <div className="stat-icon">🔥</div>
+          <div className="stat-icon">
+            <Flame size={32} strokeWidth={2} />
+          </div>
           <div className="stat-content">
             <h3>Streak</h3>
             <p className="stat-value">{user?.streak || 0}</p>
@@ -373,11 +376,11 @@ const Home = () => {
             </p>
             <div className="achievement-stats">
               <div className="achievement-stat">
-                <span className="stat-icon">🔥</span>
+                <span className="stat-icon"><Flame size={20} /></span>
                 <span className="stat-text">{user?.streak} ngày streak</span>
               </div>
               <div className="achievement-stat">
-                <span className="stat-icon">🪙</span>
+                <span className="stat-icon"><Coins size={20} /></span>
                 <span className="stat-text">{user?.ecoTokens || 0} Eco Tokens</span>
               </div>
             </div>
@@ -405,7 +408,7 @@ const Home = () => {
       </div>
 
       <div className="upload-section">
-        <h2>📸 Đăng tải hành động xanh</h2>
+        <h2><Camera size={24} strokeWidth={2} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '8px' }} />Đăng tải hành động xanh</h2>
         <p className="upload-description">
           Chụp ảnh hành động sống xanh của bạn (đi xe đạp, mang cốc cá nhân, trồng cây, phân loại rác...)
         </p>
@@ -433,7 +436,7 @@ const Home = () => {
                 style={{ display: 'none' }}
               />
               <div className="upload-placeholder">
-                <div className="upload-icon">📷</div>
+                <div className="upload-icon"><Camera size={48} strokeWidth={1.5} /></div>
                 <p>Chọn ảnh hoặc kéo thả vào đây</p>
                 <span>JPG, PNG (tối đa 5MB)</span>
               </div>
@@ -481,14 +484,14 @@ const Home = () => {
       </div>
 
       <div className="info-section">
-        <h3>💡 Gợi ý hành động xanh</h3>
+        <h3><Lightbulb size={24} strokeWidth={2} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '8px' }} />Gợi ý hành động xanh</h3>
         <div className="action-suggestions">
-          <div className="suggestion-item">🚴 Đi xe đạp thay vì xe máy</div>
-          <div className="suggestion-item">☕ Mang cốc cá nhân đến quán cà phê</div>
-          <div className="suggestion-item">🌳 Trồng một cái cây</div>
-          <div className="suggestion-item">♻️ Phân loại rác tại nguồn</div>
-          <div className="suggestion-item">🚰 Sử dụng bình nước tái sử dụng</div>
-          <div className="suggestion-item">🛍️ Mang túi vải khi mua sắm</div>
+          <div className="suggestion-item"><Bike size={20} /> Đi xe đạp thay vì xe máy</div>
+          <div className="suggestion-item"><Coffee size={20} /> Mang cốc cá nhân đến quán cà phê</div>
+          <div className="suggestion-item"><TreePine size={20} /> Trồng một cái cây</div>
+          <div className="suggestion-item"><Recycle size={20} /> Phân loại rác tại nguồn</div>
+          <div className="suggestion-item"><Droplet size={20} /> Sử dụng bình nước tái sử dụng</div>
+          <div className="suggestion-item"><Bag size={20} /> Mang túi vải khi mua sắm</div>
         </div>
       </div>
     </div>

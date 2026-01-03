@@ -170,7 +170,11 @@ export const getUserActionsApi = async (userId, statusId = null) => {
 
         // Map user avatar từ PostsDTO
         const userAvatar = post.UserAvatar || post.userAvatar || '🌱';
-        const userAvatarImage = post.UserAvatarImage || post.userAvatarImage || null;
+        const userAvatarImageRaw = post.UserAvatarImage || post.userAvatarImage;
+        // Normalize userAvatarImage - nếu là base64 giữ nguyên, nếu là URL path thì normalize
+        const userAvatarImage = userAvatarImageRaw
+          ? (userAvatarImageRaw.startsWith('data:image') ? userAvatarImageRaw : normalizeImageUrl(userAvatarImageRaw))
+          : null;
 
         return {
           id: postId,
@@ -180,11 +184,13 @@ export const getUserActionsApi = async (userId, statusId = null) => {
           userAvatarImage: userAvatarImage,
           title: post.Title || post.title || '',
           description: post.Content || post.content || '',
+          content: post.Content || post.content || '', // Thêm content field
           image: imageUrl,
           imageUrl: imageUrl,
           imagePreview: imageUrl, // Để tương thích với Moderator page
           status: status, // Đã map đúng từ StatusId
           statusId: statusId || 1, // Default to 1 nếu không có
+          adminId: post.AdminId || post.adminId || null, // Thêm AdminId
           submittedAt: post.SubmittedAt || post.submittedAt,
           approvedRejectedAt: post.ApprovedRejectedAt || post.approvedRejectedAt,
           reviewedAt: post.ApprovedRejectedAt || post.approvedRejectedAt, // Alias cho ActionHistory
@@ -271,7 +277,11 @@ export const getPendingActionsApi = async () => {
         // Lấy thông tin user từ DTO (đã được map từ PostService)
         const userName = post.UserName || post.userName || 'Người dùng';
         const userAvatar = post.UserAvatar || post.userAvatar || '🌱';
-        const userAvatarImage = post.UserAvatarImage || post.userAvatarImage || null;
+        const userAvatarImageRaw = post.UserAvatarImage || post.userAvatarImage;
+        // Normalize userAvatarImage - nếu là base64 giữ nguyên, nếu là URL path thì normalize
+        const userAvatarImage = userAvatarImageRaw
+          ? (userAvatarImageRaw.startsWith('data:image') ? userAvatarImageRaw : normalizeImageUrl(userAvatarImageRaw))
+          : null;
 
         const awardedPoints = post.AwardedPoints ?? post.awardedPoints ?? 0;
         const rewards = status === 'approved' ? {
@@ -293,14 +303,13 @@ export const getPendingActionsApi = async () => {
           imagePreview: imageUrl,
           status: status,
           statusId: statusId,
+          adminId: post.AdminId || post.adminId || null, // Thêm AdminId để filter theo moderator
           submittedAt: post.SubmittedAt || post.submittedAt,
           approvedRejectedAt: post.ApprovedRejectedAt || post.approvedRejectedAt,
           reviewedAt: post.ApprovedRejectedAt || post.approvedRejectedAt, // Alias cho ActionHistory
           awardedPoints: awardedPoints,
           rewards: rewards, // Thêm rewards để ActionHistory có thể hiển thị
-          approvedRejectedAt: post.ApprovedRejectedAt || post.approvedRejectedAt,
           rejectionReason: post.RejectionReason || post.rejectionReason,
-          awardedPoints: post.AwardedPoints ?? post.awardedPoints ?? 0,
         };
       });
 
@@ -366,7 +375,11 @@ export const getApprovedActionsApi = async () => {
 
         const userName = post.UserName || post.userName || 'Người dùng';
         const userAvatar = post.UserAvatar || post.userAvatar || '🌱';
-        const userAvatarImage = post.UserAvatarImage || post.userAvatarImage || null;
+        const userAvatarImageRaw = post.UserAvatarImage || post.userAvatarImage;
+        // Normalize userAvatarImage - nếu là base64 giữ nguyên, nếu là URL path thì normalize
+        const userAvatarImage = userAvatarImageRaw
+          ? (userAvatarImageRaw.startsWith('data:image') ? userAvatarImageRaw : normalizeImageUrl(userAvatarImageRaw))
+          : null;
 
         const awardedPoints = post.AwardedPoints ?? post.awardedPoints ?? 0;
         const rewards = {
@@ -388,6 +401,7 @@ export const getApprovedActionsApi = async () => {
           imagePreview: imageUrl,
           status: 'approved',
           statusId: 2,
+          adminId: post.AdminId || post.adminId || null, // Thêm AdminId để filter theo moderator
           submittedAt: post.SubmittedAt || post.submittedAt,
           approvedRejectedAt: post.ApprovedRejectedAt || post.approvedRejectedAt,
           reviewedAt: post.ApprovedRejectedAt || post.approvedRejectedAt,
@@ -459,7 +473,11 @@ export const getRejectedActionsApi = async () => {
 
         const userName = post.UserName || post.userName || 'Người dùng';
         const userAvatar = post.UserAvatar || post.userAvatar || '🌱';
-        const userAvatarImage = post.UserAvatarImage || post.userAvatarImage || null;
+        const userAvatarImageRaw = post.UserAvatarImage || post.userAvatarImage;
+        // Normalize userAvatarImage - nếu là base64 giữ nguyên, nếu là URL path thì normalize
+        const userAvatarImage = userAvatarImageRaw
+          ? (userAvatarImageRaw.startsWith('data:image') ? userAvatarImageRaw : normalizeImageUrl(userAvatarImageRaw))
+          : null;
 
         const awardedPoints = post.AwardedPoints ?? post.awardedPoints ?? 0;
         const rewards = null; // Rejected actions không có rewards
@@ -478,6 +496,7 @@ export const getRejectedActionsApi = async () => {
           imagePreview: imageUrl,
           status: 'rejected',
           statusId: 3,
+          adminId: post.AdminId || post.adminId || null, // Thêm AdminId để filter theo moderator
           submittedAt: post.SubmittedAt || post.submittedAt,
           approvedRejectedAt: post.ApprovedRejectedAt || post.approvedRejectedAt,
           reviewedAt: post.ApprovedRejectedAt || post.approvedRejectedAt,

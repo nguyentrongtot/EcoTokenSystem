@@ -161,6 +161,27 @@ export const AuthProvider = ({ children }) => {
           };
         }
         
+        // Refresh user data to get full profile information (name, email, etc.)
+        // Use setTimeout to avoid blocking the login response
+        setTimeout(async () => {
+          try {
+            const response = await getCurrentUserApi();
+            if (response.success && response.data) {
+              const updatedUserData = {
+                ...response.data,
+                token: userToSave.token,
+                id: userToSave.id || userToSave.userId,
+                userId: userToSave.id || userToSave.userId
+              };
+              setUser(updatedUserData);
+              localStorage.setItem('user', JSON.stringify(updatedUserData));
+            }
+          } catch (error) {
+            console.error('[AuthContext] Error refreshing user after login:', error);
+            // Don't show error to user, login was successful
+          }
+        }, 100);
+        
         return { success: true, message: response.message, data: userToSave };
       }
       
@@ -185,7 +206,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(userData));
   };
 
-  const updateUser = useCallback(async (updatedData) => {
+  const updateUser = useCallback(async (formData) => {
     try {
       // CRITICAL: Lấy token từ user hiện tại hoặc localStorage trước khi update
       const currentToken = user?.token || (() => {
@@ -204,20 +225,11 @@ export const AuthProvider = ({ children }) => {
       const currentUserId = user?.id || user?.userId;
 
       if (!currentUserId) {
-        // Nếu không có user.id, chỉ merge data và giữ token
-        const updatedUser = {
-          ...(user || {}),
-          ...updatedData,
-          token: currentToken || user?.token, // Đảm bảo giữ lại token
-          id: user?.id || user?.userId,
-          userId: user?.userId || user?.id
-        };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        return { success: true };
+        return { success: false, message: 'Chưa đăng nhập' };
       }
 
-      const response = await updateUserApi(currentUserId, updatedData);
+      // formData is now FormData object - pass directly to API
+      const response = await updateUserApi(formData);
       if (response.success) {
         // CRITICAL: Backend không trả về token, nên phải giữ lại từ user hiện tại
         const updatedUserData = {
@@ -236,6 +248,52 @@ export const AuthProvider = ({ children }) => {
       return { success: false, message: error.message };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.userId, user?.token]);
+
+  // Hàm refresh user data từ backend (GET only, không PATCH)
+  const refreshUser = useCallback(async () => {
+    try {
+      const currentToken = user?.token || (() => {
+        try {
+          const storedUser = localStorage.getItem('user');
+          if (storedUser) {
+            const parsed = JSON.parse(storedUser);
+            return parsed.token || null;
+          }
+        } catch {
+          return null;
+        }
+        return null;
+      })();
+
+      const currentUserId = user?.id || user?.userId;
+
+      if (!currentUserId) {
+        return { success: false, message: 'Chưa đăng nhập' };
+      }
+
+      // Gọi GET /api/User/me (KHÔNG phải PATCH)
+      const response = await getCurrentUserApi();
+
+      if (response.success && response.data) {
+        // Giữ token và id từ user hiện tại
+        const updatedUserData = {
+          ...response.data,
+          token: currentToken || user?.token,
+          id: currentUserId || response.data.id || response.data.userId,
+          userId: currentUserId || response.data.userId || response.data.id
+        };
+
+        setUser(updatedUserData);
+        localStorage.setItem('user', JSON.stringify(updatedUserData));
+        return { success: true, message: 'Refresh thành công' };
+      }
+
+      return { success: false, message: 'Không thể refresh user data' };
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+      return { success: false, message: error.message };
+    }
   }, [user?.id, user?.userId, user?.token]);
 
   const changePassword = async (oldPassword, newPassword) => {
@@ -420,7 +478,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     isModerator,
     isAdmin,
-    updateUser,
+    updateUser,      // Giữ nguyên cho profile save (PATCH với FormData)
+    refreshUser,     // THÊM MỚI cho auto-refresh (GET only)
     changePassword
   };
 

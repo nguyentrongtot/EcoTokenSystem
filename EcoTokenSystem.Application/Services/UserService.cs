@@ -15,10 +15,13 @@ namespace EcoTokenSystem.Application.Services
     {
         private readonly ApplicationDbContext dbContext;
         private readonly ITokenService _tokenService;
-        public UserService(ApplicationDbContext dbContext , ITokenService tokenService)
+        private readonly IStorageService _storageService;
+
+        public UserService(ApplicationDbContext dbContext, ITokenService tokenService, IStorageService storageService)
         {
             this.dbContext = dbContext;
             _tokenService = tokenService;
+            _storageService = storageService;
         }
 
         
@@ -186,17 +189,56 @@ namespace EcoTokenSystem.Application.Services
                     Data = new ResponseUserProfileDTO()
                 };
             }
+            // Update only provided fields (allow partial updates)
+            if (!string.IsNullOrEmpty(request.Name))
+            {
+                userDomain.Name = request.Name;
+            }
+
+            if (!string.IsNullOrEmpty(request.Email))
+            {
+                userDomain.Email = request.Email;
+            }
+
+            // Handle avatar update
+            if (request.Avatar != null && request.Avatar.Length > 0)
+            {
+                // User uploaded a new image
+                // Delete old avatar if it exists and is from cloud storage (not emoji, not base64)
+                if (!string.IsNullOrEmpty(userDomain.Avatar) && _storageService.IsCloudUrl(userDomain.Avatar))
+                {
+                    await _storageService.DeleteImageAsync(userDomain.Avatar);
+                }
+
+                // Upload new avatar to S3/FileSystem
+                userDomain.Avatar = await _storageService.UploadImageAsync(request.Avatar, "avatars");
+            }
+            else if (!string.IsNullOrEmpty(request.AvatarEmoji))
+            {
+                // User selected an emoji
+                userDomain.Avatar = request.AvatarEmoji;
+            }
+            // If both Avatar and AvatarEmoji are null/empty, keep existing avatar (no change)
+
             if (request.DateOfBirth.HasValue)
             {
                 userDomain.DateOfBirth = request.DateOfBirth.Value.ToDateTime(TimeOnly.MinValue);
             }
 
-            userDomain.Name = request.Name;
-            userDomain.Email = request.Email ?? string.Empty;
-            userDomain.Avatar = request.Avatar ?? string.Empty;
-            userDomain.PhoneNumber = request.PhoneNumber;   
-            userDomain.Address = request.Address;
-            userDomain.Gender = request.Gender;
+            if (!string.IsNullOrEmpty(request.PhoneNumber))
+            {
+                userDomain.PhoneNumber = request.PhoneNumber;
+            }
+
+            if (!string.IsNullOrEmpty(request.Address))
+            {
+                userDomain.Address = request.Address;
+            }
+
+            if (!string.IsNullOrEmpty(request.Gender))
+            {
+                userDomain.Gender = request.Gender;
+            }
 
              dbContext.Update(userDomain);
             await dbContext.SaveChangesAsync();
@@ -449,7 +491,8 @@ namespace EcoTokenSystem.Application.Services
                     Username = request.Username,
                     PasswordHash = passwordHash,
                     RoleId = roleId,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    Name = !string.IsNullOrWhiteSpace(request.Name) ? request.Name : null // Set Name if provided
                 };
 
                 await dbContext.Users.AddAsync(userDomain);

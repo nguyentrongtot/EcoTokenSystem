@@ -21,6 +21,72 @@
   margin: 0;
 }
 
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 600px;
+  margin: 0 auto 25px;
+  position: relative;
+}
+
+.search-bar .search-icon {
+  color: #666;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  padding: 12px 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 25px;
+  font-size: 1em;
+  transition: all 0.3s;
+  background: white;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #4a7c2a;
+  box-shadow: 0 0 0 3px rgba(74, 124, 42, 0.1);
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+.clear-search {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #999;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.3s;
+  padding: 0;
+  font-size: 14px;
+}
+
+.clear-search:hover {
+  background: #666;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.search-results-info {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #666;
+  font-size: 0.95em;
+}
+
 .leaderboard-tabs {
   display: flex;
   gap: 10px;
@@ -181,10 +247,62 @@
   font-size: 0.9em;
 }
 
-@media (max-width: 768px) {
+/* Small phones */
+@media (max-width: 480px) {
+  .leaderboard-container {
+    padding: var(--spacing-md);
+  }
+
   .leaderboard-item {
     flex-wrap: wrap;
-    padding: 15px;
+    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+
+  .rank-badge {
+    font-size: 1.8em;
+    min-width: 40px;
+  }
+
+  .rank-number {
+    font-size: 1.1em;
+    min-width: 35px;
+  }
+
+  .user-avatar {
+    width: 45px;
+    height: 45px;
+    font-size: 1.3em;
+  }
+
+  .user-info {
+    gap: var(--spacing-md);
+  }
+
+  .user-name {
+    font-size: 1em;
+  }
+
+  .user-stats {
+    width: 100%;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    padding-left: 55px;
+  }
+
+  .stat-item {
+    font-size: 0.85em;
+  }
+}
+
+/* Tablets */
+@media (min-width: 481px) and (max-width: 768px) {
+  .leaderboard-container {
+    padding: var(--spacing-lg);
+  }
+
+  .leaderboard-item {
+    padding: var(--spacing-lg);
   }
 
   .rank-badge {
@@ -208,8 +326,15 @@
   }
 
   .user-stats {
-    flex-direction: column;
-    gap: 5px;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+}
+
+/* Desktop optimization */
+@media (min-width: 769px) {
+  .leaderboard-item:hover {
+    transform: translateX(8px);
   }
 }
 
